@@ -11,11 +11,11 @@ Aliyun (China East 2 - Shanghai) Ubuntu instance for hosting personal projects.
 
 | Field | Value |
 |-------|-------|
-| Host | `106.15.125.84` |
-| Private IP | `172.24.17.232` |
+| Host | `YOUR_SERVER_IP` |
+| Private IP | `YOUR_PRIVATE_IP` |
 | User | `root` |
-| Password | `mi954993689..` |
-| SSH | `ssh root@106.15.125.84` |
+| Password | `YOUR_PASSWORD_HERE` |
+| SSH | `ssh root@YOUR_SERVER_IP` |
 
 ## Specs
 
@@ -41,30 +41,30 @@ Aliyun (China East 2 - Shanghai) Ubuntu instance for hosting personal projects.
 
 ```bash
 # SSH connect (use sshpass for password auth)
-sshpass -p 'mi954993689..' ssh -o StrictHostKeyChecking=no root@106.15.125.84
+sshpass -p 'YOUR_PASSWORD_HERE' ssh -o StrictHostKeyChecking=no root@YOUR_SERVER_IP
 
 # Deploy static site (example: shige-h5)
 cd ~/projects/shige-h5 && npm run build
-scp -r dist/* root@106.15.125.84:/var/www/html/
+scp -r dist/* root@YOUR_SERVER_IP:/var/www/html/
 
 # Check nginx status
-ssh root@106.15.125.84 "systemctl status nginx"
+ssh root@YOUR_SERVER_IP "systemctl status nginx"
 
 # View nginx config
-ssh root@106.15.125.84 "cat /etc/nginx/sites-enabled/default"
+ssh root@YOUR_SERVER_IP "cat /etc/nginx/sites-enabled/default"
 ```
 
 ### CSFilter Operations
 
 ```bash
 # Service management
-sshpass -p 'mi954993689..' ssh root@106.15.125.84 "systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
+sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
 
 # Update code
-sshpass -p 'mi954993689..' ssh root@106.15.125.84 "systemctl stop csfilter-scheduler csfilter-web && cd /opt/csfilter/app && sudo -u csfilter git pull origin main && sudo -u csfilter /opt/csfilter/app/.venv/bin/pip install -r requirements.txt && systemctl start csfilter-scheduler csfilter-web"
+sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl stop csfilter-scheduler csfilter-web && cd /opt/csfilter/app && sudo -u csfilter git pull origin main && sudo -u csfilter /opt/csfilter/app/.venv/bin/pip install -r requirements.txt && systemctl start csfilter-scheduler csfilter-web"
 
 # View logs
-sshpass -p 'mi954993689..' ssh root@106.15.125.84 "tail -50 /var/log/csfilter/scheduler.log"
+sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "tail -50 /var/log/csfilter/scheduler.log"
 
 # Service user: csfilter
 # App path: /opt/csfilter/app

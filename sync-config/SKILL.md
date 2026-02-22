@@ -3,20 +3,48 @@ name: sync-config
 description: Use when user asks to sync Claude config, backup config, restore config on a new machine, push config to remote, or check what will be synced. Also use when user says "sync", "backup config", or "restore config".
 ---
 
-# Claude Config Sync
+# Claude Config Sync (cc-sync)
 
-Single-command sync of `~/.claude/` to `git@github.com:Mixiaomiupup/claude-config.git`. Local is the authority source.
+Unified CLI for syncing Claude Code config and skills to remote repos.
+
+## Architecture
+
+| Component | Repos | Content |
+|-----------|-------|---------|
+| **config** | GitHub `claude-config` + Yunxiao `claude_config` | hooks, settings, agents, commands, output-styles, plans infra, plugins, docs |
+| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 14 first-party skills (excluding baoyu-skills) |
+| **third-party** | Each has own remote | baoyu-skills etc. (tracked in `component-manifest.json`) |
 
 ## Commands
 
+### Push (local → remote)
+
 | Action | Command |
 |--------|---------|
-| Preview changes | `~/.claude/sync-to-remote.sh --dry-run` |
-| Sync to remote | `~/.claude/sync-to-remote.sh` |
-| Sync with message | `~/.claude/sync-to-remote.sh -m "feat: add new skill"` |
-| Preview restore | `~/.claude/restore-from-remote.sh --dry-run` |
-| Full restore | `~/.claude/restore-from-remote.sh` |
-| Selective restore | `~/.claude/restore-from-remote.sh --only skills hooks` |
+| Push everything | `~/.claude/cc-sync push` |
+| Push config only | `~/.claude/cc-sync push --target config` |
+| Push skills only | `~/.claude/cc-sync push --target skills` |
+| Push to GitHub only | `~/.claude/cc-sync push --platform github` |
+| Push to Yunxiao only | `~/.claude/cc-sync push --platform yunxiao` |
+| Preview changes | `~/.claude/cc-sync push --dry-run` |
+| Custom commit msg | `~/.claude/cc-sync push -m "feat: add new skill"` |
+| Combine options | `~/.claude/cc-sync push --target skills --platform github --dry-run` |
+
+### Pull (remote → local)
+
+| Action | Command |
+|--------|---------|
+| Pull everything | `~/.claude/cc-sync pull` |
+| Pull config only | `~/.claude/cc-sync pull --target config` |
+| Pull skills only | `~/.claude/cc-sync pull --target skills` |
+| Pull from Yunxiao | `~/.claude/cc-sync pull --from yunxiao` |
+| Preview restore | `~/.claude/cc-sync pull --dry-run` |
+
+### Status
+
+| Action | Command |
+|--------|---------|
+| Show sync status | `~/.claude/cc-sync status` |
 
 ## Workflow
 
@@ -26,58 +54,68 @@ digraph sync_flow {
     "User says sync" -> "Run --dry-run";
     "Run --dry-run" -> "Show diff to user";
     "Show diff to user" -> "User confirms?" [shape=diamond];
-    "User confirms?" -> "Run sync" [label="yes"];
+    "User confirms?" -> "Run push/pull" [label="yes"];
     "User confirms?" -> "Done" [label="no"];
 }
 ```
 
-### Sync (daily use)
+### Push (daily use)
 
-1. Run `~/.claude/sync-to-remote.sh --dry-run` first
+1. Run `~/.claude/cc-sync push --dry-run` first
 2. Show the diff summary to user
-3. If user confirms, run `~/.claude/sync-to-remote.sh`
+3. If user confirms, run `~/.claude/cc-sync push`
 4. Report commit hash and changed files
 
-### Restore (new machine)
+### Pull (new machine)
 
-1. Run `~/.claude/restore-from-remote.sh --dry-run` first
-2. Show what will be restored
-3. If user confirms, run `~/.claude/restore-from-remote.sh`
-4. Remind user to set `ANTHROPIC_AUTH_TOKEN` if settings.json was restored without local merge
+1. Bootstrap:
+   ```bash
+   git clone git@github.com:Mixiaomiupup/claude-config.git /tmp/cc
+   cp /tmp/cc/{cc-sync,sync-config.sh,component-manifest.json} ~/.claude/
+   chmod +x ~/.claude/cc-sync
+   ```
+2. Run `~/.claude/cc-sync pull --dry-run` first
+3. Show what will be restored
+4. If user confirms, run `~/.claude/cc-sync pull`
+5. Remind user to set `ANTHROPIC_AUTH_TOKEN` if needed
 
 ## What Gets Synced
+
+### Config repo (`claude-config`)
 
 | Category | Items |
 |----------|-------|
 | Core config | `CLAUDE.md`, `AUTO_APPROVE_GUIDE.md`, `CONFIG_PACKAGE_GUIDE.md`, `settings.local.json` |
-| Sanitized | `settings.json` (token replaced with `YOUR_TOKEN_HERE`, `model` field stripped) |
-| Directories | `hooks/`, `skills/` (excluding baoyu-skills), `agents/`, `commands/`, `output-styles/` |
+| Sanitized | `settings.json` (token → `YOUR_TOKEN_HERE`, `model` field stripped) |
+| Directories | `hooks/`, `agents/`, `commands/`, `output-styles/` |
 | Plans infra | `plans/README.md`, `plans/PLANS_INDEX.md`, `plans/templates/` |
-| Plugins | `plugins/installed_plugins.json` |
-| Sync scripts | `sync-config.sh`, `sync-to-remote.sh`, `restore-from-remote.sh` |
-| Auto-generated | `skill-sources.json` (third-party skill git URLs, detected from `skills/*/.git/`) |
+| Plugins | `plugins/` (excluding cache) |
+| Sync infra | `sync-config.sh`, `cc-sync`, `component-manifest.json` |
 
-## What Gets Excluded
+### Skills repo (`claude-skills`)
 
-- **baoyu-skills**: Has its own git repo, recorded in `skill-sources.json` instead
-- **Runtime data**: `history.jsonl`, `stats-cache.json`, `auto-approve-audit.log`
-- **Cache dirs**: `session-env/`, `shell-snapshots/`, `file-history/`, `debug/`, `todos/`, `telemetry/`, `usage-data/`, `statsig/`, `ide/`, `projects/`, `tasks/`
-- **Plugin cache**: `plugins/cache/`, `plugins/marketplaces/`
-- **Temp plans**: `plans/active/`, `plans/archive/`, individual plan `.md` files
+| Category | Items |
+|----------|-------|
+| First-party | 14 skills: commit, debug, doc-control, explain, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
+| Sanitized | `server/SKILL.md` (passwords → `YOUR_PASSWORD_HERE`, IPs → placeholders) |
+| Excluded | `baoyu-skills` (has own git repo, tracked in manifest) |
 
 ## Key Behaviors
 
-- **Sanitization**: `settings.json` is always sanitized before push. Never push raw tokens.
-- **Lock file**: `/private/tmp/claude-config-sync.lock` prevents concurrent runs.
-- **Restore merge**: On restore, local `ANTHROPIC_AUTH_TOKEN` is preserved if it exists and is not a placeholder.
-- **Third-party skills**: Detected by scanning `skills/*/` for `.git/` directories. URLs are written to `skill-sources.json`. On restore, these are auto-cloned.
-- **Staging dir**: `/private/tmp/claude-config-staging` is used as a temporary working copy.
+- **Config and skills are separate repos**: config repo has no `skills/` directory
+- **Dual platform push**: Both GitHub and Yunxiao receive the same content
+- **Sanitization**: `settings.json` tokens and `server/SKILL.md` credentials are replaced with placeholders
+- **Lock file**: `/private/tmp/claude-config-sync.lock` prevents concurrent push runs
+- **Restore merge**: On pull, local `ANTHROPIC_AUTH_TOKEN` is preserved if it exists
+- **Third-party skills**: Tracked in `component-manifest.json`, auto-cloned on pull
+- **Staging dirs**: `/private/tmp/claude-config-staging` and `/private/tmp/claude-skills-staging`
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Running sync without `--dry-run` first | Always preview first |
-| Forgetting to set token after restore on new machine | Check `settings.json` for `YOUR_TOKEN_HERE` |
-| Expecting baoyu-skills to be in repo | It's excluded; check `skill-sources.json` for its URL |
-| Running sync while another is in progress | Wait for lock to release or remove stale lock file |
+| Running push without `--dry-run` first | Always preview first |
+| Forgetting to set token after pull on new machine | Check `settings.json` for `YOUR_TOKEN_HERE` |
+| Expecting baoyu-skills in skills repo | It's excluded; check `component-manifest.json` |
+| Running push while another is in progress | Wait for lock to release or remove stale lock |
+| Using old scripts (sync-to-remote.sh etc.) | Use `cc-sync` instead — old scripts are deprecated |
