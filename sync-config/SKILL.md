@@ -12,7 +12,7 @@ Unified CLI for syncing Claude Code config and skills to remote repos.
 | Component | Repos | Content |
 |-----------|-------|---------|
 | **config** | GitHub `claude-config` + Yunxiao `claude_config` | hooks, settings, agents, commands, output-styles, plans infra, plugins, docs |
-| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 14 first-party skills (excluding baoyu-skills) |
+| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 15 first-party skills (excluding baoyu-skills) |
 | **third-party** | Each has own remote | baoyu-skills etc. (tracked in `component-manifest.json`) |
 
 ## Commands
@@ -27,6 +27,7 @@ Unified CLI for syncing Claude Code config and skills to remote repos.
 | Push to GitHub only | `~/.claude/cc-sync push --platform github` |
 | Push to Yunxiao only | `~/.claude/cc-sync push --platform yunxiao` |
 | Preview changes | `~/.claude/cc-sync push --dry-run` |
+| Skip confirmation | `~/.claude/cc-sync push --yes` |
 | Custom commit msg | `~/.claude/cc-sync push -m "feat: add new skill"` |
 | Combine options | `~/.claude/cc-sync push --target skills --platform github --dry-run` |
 
@@ -96,15 +97,15 @@ digraph sync_flow {
 
 | Category | Items |
 |----------|-------|
-| First-party | 14 skills: commit, debug, doc-control, explain, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
-| Sanitized | `server/SKILL.md` (passwords → `YOUR_PASSWORD_HERE`, IPs → placeholders) |
+| First-party | 15 skills: commit, debug, doc-control, explain, gemini-image, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
+| Sanitized | `server/SKILL.md` (passwords/IPs → placeholders), `gemini-image/SKILL.md` (GCP credentials → placeholders) |
 | Excluded | `baoyu-skills` (has own git repo, tracked in manifest) |
 
 ## Key Behaviors
 
 - **Config and skills are separate repos**: config repo has no `skills/` directory
 - **Dual platform push**: Both GitHub and Yunxiao receive the same content
-- **Sanitization**: `settings.json` tokens and `server/SKILL.md` credentials are replaced with placeholders
+- **Sanitization**: `settings.json` tokens and skill credentials (`server/SKILL.md`, `gemini-image/SKILL.md`) are replaced with placeholders
 - **Lock file**: `/private/tmp/claude-config-sync.lock` prevents concurrent push runs
 - **Restore merge**: On pull, local `ANTHROPIC_AUTH_TOKEN` is preserved if it exists
 - **Third-party skills**: Tracked in `component-manifest.json`, auto-cloned on pull
