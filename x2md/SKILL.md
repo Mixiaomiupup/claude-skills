@@ -44,7 +44,18 @@ The script outputs to `X收藏/` subdirectory if it exists under the current wor
       - Fill in `summary` (as YAML list)
       - Change `status` from `raw` to `enriched`
    f. Append a `## 我的笔记` section at the end of the file (empty, for future dialog notes)
-4. Report the saved filename, article title, category, and tags to the user
+4. **飞书同步确认** — 询问用户「是否同步到飞书知识库？」
+   - 若用户确认：
+     a. 根据 `category` 的一级分类确定目标飞书节点（查 `lark-mcp` skill 的标签→节点映射表）
+     b. 获取 `tenant_access_token`
+     c. 在目标节点下创建新文档节点（直接 API `POST /wiki/v2/spaces/{space_id}/nodes`）
+     d. 用 `docx_builtin_import` 导入 Markdown 内容
+     e. 在本地文件 frontmatter 中追加：
+        - `feishu_node_token: "<新节点的 node_token>"`
+        - `feishu_sync_time: "<当前时间 ISO 格式>"`
+     f. 报告同步成功，附带飞书节点信息
+   - 若用户拒绝：跳过，仅保存本地
+5. Report the saved filename, article title, category, and tags to the user
 
 ## Supported Content Types
 
@@ -57,7 +68,7 @@ The script outputs to `X收藏/` subdirectory if it exists under the current wor
 - Filename: `<作者> - <标题>.md` (Article uses article title, single tweet takes first 30 chars, thread indicates count)
 - Location: `X收藏/` subdirectory under the vault root
 - Content: YAML frontmatter + clean Markdown with metadata (author, date, source link), cover image, headings, inline styles, and embedded images
-- Frontmatter fields: title, author, author_handle, source, type, date, saved_at, lang, likes, retweets, views, tags, category, summary, status
+- Frontmatter fields: title, author, author_handle, source, type, date, saved_at, lang, likes, retweets, views, tags, category, summary, status, feishu_node_token (optional), feishu_sync_time (optional)
 - Also copied to clipboard (macOS)
 
 ## Frontmatter Example
@@ -84,5 +95,7 @@ summary:
   - GPT-5.3 Codex 和 Opus 4.6 同日发布标志新时代
   - 1-5 年内 50% 入门级白领工作可能被 AI 取代
 status: enriched
+feishu_node_token: ""          # 飞书节点 token（同步后自动填充）
+feishu_sync_time: ""           # 最后同步时间（同步后自动填充）
 ---
 ```

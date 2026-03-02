@@ -1,8 +1,8 @@
 # Claude Code Skills
 
-> 15 个自研 skill | 1 个第三方 | 6 大类
+> 16 个自研 skill | 1 个第三方 | 6 大类
 
-个人 Claude Code skill 合集，通过 `cc-sync` 同步至 GitHub 和云效。
+个人 Claude Code skill 合集，通过 `cc-sync` 同步至 GitHub 和云效。完整能力展示见[能力全景指南](https://huazhi-ai.feishu.cn/docx/ENUFdpeoxopStLxcU5pceHhnnUe)。
 
 ## 总览
 
@@ -22,6 +22,7 @@
 | [explain](explain/SKILL.md) | 开发流程 | "explain this" | 代码图解 |
 | [server](server/SKILL.md) | 基础设施 | SSH、部署 | 阿里云服务器管理 |
 | [sync-config](sync-config/SKILL.md) | 基础设施 | "sync"、"备份配置" | 配置与 skill 双平台同步 |
+| [lark-mcp](lark-mcp/SKILL.md) | 内容与知识 | 飞书操作 | 飞书知识库/文档/群聊/多维表格集成 |
 | [doc-control](doc-control/SKILL.md) | 文档 | 创建/更新文档前 | 文档生成控制 |
 
 ---
@@ -54,17 +55,18 @@
 
 ### [kb](kb/SKILL.md) — Obsidian 知识库管理
 
-管理 `~/Documents/obsidian/mixiaomi` vault，五种模式覆盖知识管理全流程：
+管理 `~/Documents/obsidian/mixiaomi` vault，六种模式覆盖知识管理全流程：
 
 - **write**：写笔记/记点子，自动按内容类型分目录（创意点子/知识库/Vibe Coding），带 9 类标签体系的 frontmatter
-- **search**：在 vault 中搜索内容
+- **search**：在 vault 中搜索内容（支持本地/飞书/全部）
 - **synthesize**：跨笔记综合分析，生成综合笔记
 - **insight**：追加个人洞察和反思
 - **browse**：列出 vault 内容概览
+- **sync**：双向同步飞书知识库（Push 本地更新 / Pull 飞书新文档）
 
 与 x2md 有明确边界：X/Twitter 链接一律拒绝，提示走 x2md。
 
-**常用说法**：`记个点子`、`记下来`、`搜一下知识库`、`总结一下XX主题`
+**常用说法**：`记个点子`、`记下来`、`搜一下知识库`、`总结一下XX主题`、`同步飞书`
 
 ---
 
@@ -73,6 +75,23 @@
 把 X/Twitter 的推文、线程、长文转成干净的 Markdown 存进 Obsidian。不只是格式转换 — 保存后还会做 AI enrichment：自动分类（9 个类目如 AI/发展、技术/趋势、商业/创业等）、打标签、写中文摘要，把 `status` 从 `raw` 改为 `enriched`。
 
 **常用说法**：`保存这条推文`、给一个 x.com 链接
+
+---
+
+### [lark-mcp](lark-mcp/SKILL.md) — 飞书 MCP 集成
+
+飞书平台的全面集成，覆盖知识库、文档、群聊、多维表格四大场景。通过 Lark MCP Server 连接飞书开放平台 API，支持 17 个验证可用的 MCP 工具。
+
+**核心能力**：
+
+- **知识库操作**：浏览 wiki 节点树、获取节点信息、读取文档内容、导入 Markdown 文档、发布到知识库
+- **文档操作**：导入/读取飞书文档，支持 Markdown 到 docx 的自动转换
+- **群聊操作**：列出群组、获取成员、查看聊天记录、发送消息
+- **多维表格**：创建应用/表格、搜索记录、创建/更新记录
+
+**与 kb 的协作**：kb skill 的 sync 模式调用 lark-mcp 实现本地 Obsidian ↔ 飞书知识库的双向同步。
+
+**常用场景**：`发布文档到飞书`、`看看飞书知识库`、`飞书群里发个消息`
 
 ---
 
@@ -177,5 +196,5 @@ cc-sync pull                      # 从远程拉取恢复
 ```bash
 cc-sync push --target skills --dry-run   # 预览 skill 变更
 cc-sync push --target skills --yes       # 推送
-cc-sync status                           # 查看状态（应显示 15/15）
+cc-sync status                           # 查看状态（应显示 16/16）
 ```
