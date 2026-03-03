@@ -68,6 +68,34 @@ Run via Bash tool. No extra setup needed.
 ToolSearch(query: "+yunxiao <keyword>")  →  then call the returned tool
 ```
 
+### Clone Configuration
+
+| Key | Value |
+|-----|-------|
+| Organization ID | `696f3f56b28d0aba0f5e4371` |
+| Codeup Base URL | `https://codeup.aliyun.com/696f3f56b28d0aba0f5e4371` |
+| SSH Clone URL | `git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/<repo-name>.git` |
+| HTTPS Clone Account | `huazhiai-fkgRu` (fallback only) |
+| HTTPS Clone Password | `Huazhi@123` (fallback only) |
+
+**Clone command** (SSH, preferred):
+```bash
+git clone git@codeup.aliyun.com:696f3f56b28d0aba0f5e4371/<repo-name>.git
+```
+
+**Fallback** (HTTPS, only when SSH unavailable e.g. Clash TUN active):
+```bash
+git clone https://huazhiai-fkgRu:Huazhi%40123@codeup.aliyun.com/696f3f56b28d0aba0f5e4371/<repo-name>.git
+# Post-clone: remove plaintext password from remote URL
+cd <repo-name>
+git remote set-url origin https://codeup.aliyun.com/696f3f56b28d0aba0f5e4371/<repo-name>.git
+git config credential.helper store
+```
+
+**Priority**: SSH > HTTPS. Only fall back to HTTPS when:
+- Clash TUN mode is active (TUN intercepts all traffic at network level, SSH will fail)
+- Network blocks port 22 (e.g. restrictive corporate WiFi)
+
 ### Tool Categories
 
 #### Repository & Code

@@ -246,6 +246,7 @@ Wiki APIs return error 99991663 if:
 | 场景 | 推荐方法 | 原因 |
 |------|---------|------|
 | 新发布 / 全量更新长文档 | **curl 文件上传导入** | 快速、格式稳定 |
+| 更新已发布文档（改链接、改文字） | **Document Block API** | 原地修改，不产生重复文档 |
 | 小改动（加标题、改段落） | **Document Block API** | 增量编辑，不需要重新导入 |
 | 短文档 / 快速测试 | **MCP `docx_builtin_import`** | 最简单，但长文档格式可能出错 |
 
@@ -355,57 +356,37 @@ Wiki APIs return error 99991663 if:
 
 **注意**: 不要先创建空 wiki 节点再导入内容，应先导入文档再移入 wiki。
 
-### 方法 3: Document Block API（增量编辑）
+### 方法 3: Document Block API（增量编辑，已验证）
 
-对已有飞书文档进行小改动时使用，无需重新导入整篇文档。
+对已有飞书文档进行局部修改时使用，无需重新导入。**优先用这个方法更新已发布的文档**，避免产生重复文档。
 
-**获取文档 block 结构**：
+#### 基础 API
+
+**获取文档所有 blocks**：
 ```bash
-# 获取文档所有 blocks
-curl -s "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token>/blocks" \
-  -H "Authorization: Bearer $TOKEN" \
-  | python3 -c "
-import sys, json
-blocks = json.load(sys.stdin)['data']['items']
-for b in blocks:
-    bt = b.get('block_type', 0)
-    bid = b['block_id']
-    # Type 1=Page, 2=Text, 3=Heading1, 4=Heading2, ...
-    text = ''
-    for key in ['text', 'heading1', 'heading2', 'heading3']:
-        el = b.get(key, {}).get('elements', [])
-        if el:
-            text = el[0].get('text_run', {}).get('content', '')[:50]
-            break
-    print(f'  type={bt} id={bid} text={text}')
-"
+curl -s "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token>/blocks?page_size=500" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-**在指定 block 后追加子 block**：
-```bash
-curl -s -X POST "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token>/blocks/<block_id>/children" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "children": [{
-      "block_type": 3,
-      "heading1": {
-        "elements": [{"text_run": {"content": "新标题"}}]
-      }
-    }]
-  }'
-```
-
-**修改已有 block 内容**：
+**PATCH 更新 block 内容**（已验证）：
 ```bash
 curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token>/blocks/<block_id>" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "update_text_elements": {
-      "elements": [{"text_run": {"content": "更新后的文本"}}]
+      "elements": [{"text_run": {"content": "更新后的文本", "text_element_style": {...}}}],
+      "style": {"align": 1, "folded": false}
     }
   }'
+```
+
+**追加子 block**：
+```bash
+curl -s -X POST "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token>/blocks/<block_id>/children" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"children": [{"block_type": 2, "text": {"elements": [{"text_run": {"content": "新段落"}}]}}]}'
 ```
 
 **删除 blocks**：
@@ -416,18 +397,104 @@ curl -s -X DELETE "https://open.feishu.cn/open-apis/docx/v1/documents/<doc_token
   -d '{"start_index": 0, "end_index": 2}'
 ```
 
-**Block 类型速查**：
-| block_type | 含义 |
-|-----------|------|
-| 1 | Page（文档根节点） |
-| 2 | Text（纯文本段落） |
-| 3 | Heading1 |
-| 4 | Heading2 |
-| 5 | Heading3 |
-| 12 | Ordered List |
-| 13 | Unordered List |
-| 14 | Code Block |
-| 22 | Table |
+#### 批量文本替换工作流（已验证）
+
+典型场景：文档中的 URL、名称等需要批量替换，但不想重新导入整篇文档。
+
+**完整 Python 脚本**：
+```python
+import json, subprocess, urllib.parse
+
+DOC_ID = '<obj_token>'  # 文档的 obj_token，不是 node_token
+OLD = 'old-text'
+NEW = 'new-text'
+OLD_ENCODED = urllib.parse.quote(OLD, safe='')
+NEW_ENCODED = urllib.parse.quote(NEW, safe='')
+
+def curl_json(args):
+    result = subprocess.run(['curl', '-s'] + args, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+# 1. 获取 token
+token = curl_json(['-X', 'POST',
+    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+    '-H', 'Content-Type: application/json',
+    '-d', json.dumps({'app_id': '<APP_ID>', 'app_secret': '<APP_SECRET>'}),
+])['tenant_access_token']
+
+# 2. 获取所有 blocks
+blocks = curl_json([
+    f'https://open.feishu.cn/open-apis/docx/v1/documents/{DOC_ID}/blocks?page_size=500',
+    '-H', f'Authorization: Bearer {token}',
+])['data']['items']
+
+# 3. 遍历、替换、PATCH
+for b in blocks:
+    if OLD not in json.dumps(b, ensure_ascii=False):
+        continue
+
+    block_id = b['block_id']
+    # block_type 2=text, 12=bullet; 内容分别在 'text' 和 'bullet' key
+    content_key = {2: 'text', 12: 'bullet'}.get(b['block_type'])
+    if not content_key:
+        continue
+
+    elements = b[content_key]['elements']
+    new_elements = []
+    for elem in elements:
+        if 'text_run' not in elem:
+            new_elements.append(elem)
+            continue
+        tr = elem['text_run']
+        new_style = dict(tr['text_element_style'])
+        # 替换 link URL（URL 编码格式）
+        if 'link' in new_style:
+            new_style['link'] = {
+                'url': new_style['link']['url'].replace(OLD_ENCODED, NEW_ENCODED)
+            }
+        new_elements.append({
+            'text_run': {
+                'content': tr['content'].replace(OLD, NEW),
+                'text_element_style': new_style,
+            }
+        })
+
+    # PATCH
+    resp = curl_json(['-X', 'PATCH',
+        f'https://open.feishu.cn/open-apis/docx/v1/documents/{DOC_ID}/blocks/{block_id}',
+        '-H', f'Authorization: Bearer {token}',
+        '-H', 'Content-Type: application/json',
+        '-d', json.dumps({
+            'update_text_elements': {
+                'elements': new_elements,
+                'style': b[content_key].get('style', {}),
+            }
+        }),
+    ])
+    print(f"{'OK' if resp.get('code') == 0 else 'FAIL'} block {block_id}")
+```
+
+**关键注意事项**：
+
+1. **保留 `text_element_style`**：每个 `text_run` 携带样式（bold、link、inline_code 等），PATCH 时必须完整保留，否则格式丢失
+2. **link URL 是 URL 编码的**：`link.url` 中 `/` 编码为 `%2F`，替换时需要同时处理编码版本
+3. **不同 block_type 的内容 key 不同**：type 2 用 `text`，type 12 用 `bullet`，type 3/4/5 用 `heading1/2/3`
+4. **需要传 `style`**：`update_text_elements` 的 body 需要同时包含 `elements` 和 `style`（从原 block 复制）
+5. **obj_token vs node_token**：Block API 使用 `obj_token`（文档 ID），不是 `node_token`（wiki 节点 ID）。可通过 `wiki_v2_space_getNode` 从 node_token 获取 obj_token
+
+#### Block 类型速查
+
+| block_type | 含义 | 内容 key |
+|-----------|------|---------|
+| 1 | Page（文档根节点） | `page` |
+| 2 | Text（纯文本段落） | `text` |
+| 3 | Heading1 | `heading1` |
+| 4 | Heading2 | `heading2` |
+| 5 | Heading3 | `heading3` |
+| 12 | Bullet List（无序列表） | `bullet` |
+| 13 | Ordered List（有序列表） | `ordered` |
+| 14 | Code Block | `code` |
+| 22 | Table | `table` |
 
 ## 从飞书知识库拉取内容
 
