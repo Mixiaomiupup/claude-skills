@@ -12,7 +12,7 @@ Unified CLI for syncing Claude Code config and skills to remote repos.
 | Component | Repos | Content |
 |-----------|-------|---------|
 | **config** | GitHub `claude-config` + Yunxiao `claude_config` | hooks, settings, agents, commands, output-styles, plans infra, plugins, docs |
-| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 15 first-party skills (excluding baoyu-skills) |
+| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 16 first-party skills (excluding baoyu-skills) |
 | **third-party** | Each has own remote | baoyu-skills etc. (tracked in `component-manifest.json`) |
 
 ## Commands
@@ -79,6 +79,7 @@ digraph sync_flow {
 3. Show what will be restored
 4. If user confirms, run `~/.claude/cc-sync pull`
 5. Remind user to set `ANTHROPIC_AUTH_TOKEN` if needed
+6. Check `~/.claude.json` for `YOUR_` placeholders — fill in MCP server secrets (see `~/.claude/MCP_SERVERS.md`)
 
 ## What Gets Synced
 
@@ -87,6 +88,7 @@ digraph sync_flow {
 | Category | Items |
 |----------|-------|
 | Core config | `CLAUDE.md`, `AUTO_APPROVE_GUIDE.md`, `CONFIG_PACKAGE_GUIDE.md`, `settings.local.json` |
+| MCP config | `mcp-servers.json` (extracted from `~/.claude.json`, secrets → placeholders), `MCP_SERVERS.md` (setup guide) |
 | Sanitized | `settings.json` (token → `YOUR_TOKEN_HERE`, `model` field stripped) |
 | Directories | `hooks/`, `agents/`, `commands/`, `output-styles/` |
 | Plans infra | `plans/README.md`, `plans/PLANS_INDEX.md`, `plans/templates/` |
@@ -97,7 +99,7 @@ digraph sync_flow {
 
 | Category | Items |
 |----------|-------|
-| First-party | 15 skills: commit, debug, doc-control, explain, gemini-image, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
+| First-party | 16 skills: commit, debug, doc-control, explain, gemini-image, kb, lark-mcp, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
 | Sanitized | `server/SKILL.md` (passwords/IPs → placeholders), `gemini-image/SKILL.md` (GCP credentials → placeholders) |
 | Excluded | `baoyu-skills` (has own git repo, tracked in manifest) |
 
@@ -108,6 +110,7 @@ digraph sync_flow {
 - **Sanitization**: `settings.json` tokens and skill credentials (`server/SKILL.md`, `gemini-image/SKILL.md`) are replaced with placeholders
 - **Lock file**: `/private/tmp/claude-config-sync.lock` prevents concurrent push runs
 - **Restore merge**: On pull, local `ANTHROPIC_AUTH_TOKEN` is preserved if it exists
+- **MCP merge**: On push, `mcpServers` from `~/.claude.json` is extracted and sanitized (env keys → placeholders, args secrets → placeholders, paths → `$HOME`). On pull, repo structure is merged back with local secrets restored. Local-only servers are preserved.
 - **Third-party skills**: Tracked in `component-manifest.json`, auto-cloned on pull
 - **Staging dirs**: `/private/tmp/claude-config-staging` and `/private/tmp/claude-skills-staging`
 
@@ -120,3 +123,5 @@ digraph sync_flow {
 | Expecting baoyu-skills in skills repo | It's excluded; check `component-manifest.json` |
 | Running push while another is in progress | Wait for lock to release or remove stale lock |
 | Using old scripts (sync-to-remote.sh etc.) | Use `cc-sync` instead — old scripts are deprecated |
+| Forgetting MCP secrets after pull | Search `YOUR_` in `~/.claude.json` and fill in real keys (see `~/.claude/MCP_SERVERS.md`) |
+| Manually editing mcp-servers.json in repo | Edit `~/.claude.json` directly, then `cc-sync push` to sync |
