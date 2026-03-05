@@ -12,11 +12,59 @@ x2md - 将 X/Twitter 推文或长文（Article）转换为 Markdown
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import URLError
+
+
+def _make_ssl_context() -> ssl.SSLContext:
+    """Create an SSL context that works on macOS Homebrew Python.
+
+    Homebrew Python may lack a default CA bundle (cert.pem). We try:
+    1. certifi (if installed)
+    2. Default system context
+    3. Unverified context as last resort
+    """
+    # Try certifi first
+    try:
+        import certifi
+
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        return ctx
+    except ImportError:
+        pass
+
+    # Try default context — works when system certs are available
+    ctx = ssl.create_default_context()
+    try:
+        ctx.load_default_certs()
+    except Exception:
+        pass
+
+    # Verify the context works by checking it has CA certs loaded
+    stats = ctx.cert_store_stats()
+    if stats.get("x509_ca", 0) > 0:
+        return ctx
+
+    # Last resort: try loading from common macOS locations
+    for ca_path in [
+        "/etc/ssl/cert.pem",
+        "/usr/local/etc/openssl/cert.pem",
+        "/opt/homebrew/etc/ca-certificates/cert.pem",
+    ]:
+        if os.path.exists(ca_path):
+            ctx = ssl.create_default_context(cafile=ca_path)
+            return ctx
+
+    # If nothing works, use unverified (with warning)
+    print("警告: 无法加载 SSL 证书，使用不验证模式。建议运行: pip install certifi")
+    return ssl._create_unverified_context()
+
+
+_SSL_CTX = _make_ssl_context()
 
 
 def extract_tweet_id(url: str) -> str:
@@ -41,7 +89,7 @@ def fetch_tweet(tweet_id: str) -> dict:
     api_url = f"https://api.fxtwitter.com/status/{tweet_id}"
     req = Request(api_url, headers={"User-Agent": "x2md/1.0"})
     try:
-        with urlopen(req, timeout=30) as resp:
+        with urlopen(req, timeout=30, context=_SSL_CTX) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("code") != 200:
                 print(f"API 返回错误: {data}")

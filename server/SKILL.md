@@ -3,9 +3,18 @@ name: server
 description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to their cloud server. Also use when deploying projects, checking server status, or managing services on the remote machine.
 ---
 
-# Lightweight Application Server
+# Machines Overview
 
-Aliyun (China East 2 - Shanghai) Ubuntu instance for hosting personal projects.
+| Machine | Role | Access |
+| ------- | ---- | ------ |
+| Aliyun 轻量服务器 | Web hosting, frps relay | `ssh root@YOUR_SERVER_IP` |
+| 个人PC | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
+
+---
+
+# 1. Aliyun 轻量应用服务器
+
+China East 2 (Shanghai) Ubuntu instance for hosting personal projects.
 
 ## Connection
 
@@ -35,7 +44,9 @@ Aliyun (China East 2 - Shanghai) Ubuntu instance for hosting personal projects.
 | Project                          | Web Root               | Local Source           | Port                                 |
 | -------------------------------- | ---------------------- | ---------------------- | ------------------------------------ |
 | shige-h5 (food personality test) | `/var/www/html/shige/` | `~/projects/shige-h5/` | 80 (nginx) → `/shige`                |
-| csfilter (CS2 饰品量化分析)      | `/opt/csfilter/app/`   | `~/csfilter/`          | 5001 (gunicorn) → nginx `/csfilter/` |
+| csfilter (CS2 饰品量化分析)      | nginx 反代到工作站     | -                      | nginx `/csfilter/` → 工作站:5001     |
+
+> **注意**: csfilter 实际运行在个人PC上，Aliyun 仅做 nginx 反向代理。见下方工作站部分。
 
 ## Common Operations
 
@@ -56,23 +67,7 @@ ssh root@YOUR_SERVER_IP "cat /etc/nginx/sites-enabled/default"
 
 ### CSFilter Operations
 
-```bash
-# Service management
-sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
-
-# Update code
-sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl stop csfilter-scheduler csfilter-web && cd /opt/csfilter/app && sudo -u csfilter git pull origin main && sudo -u csfilter /opt/csfilter/app/.venv/bin/pip install -r requirements.txt && systemctl start csfilter-scheduler csfilter-web"
-
-# View logs
-sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "tail -50 /var/log/csfilter/scheduler.log"
-
-# Service user: csfilter
-# App path: /opt/csfilter/app
-# Venv: /opt/csfilter/app/.venv
-# DB: /opt/csfilter/app/database/csqaq.db (WAL mode)
-# Backups: /opt/csfilter/backups/ (daily 3AM, 7-day retention)
-# Logs: /var/log/csfilter/
-```
+> csfilter 实际部署在个人PC上，不在 Aliyun。操作详见下方「个人PC - CSFilter」部分。
 
 ## Nginx Routing Rules
 
@@ -115,5 +110,104 @@ location /新项目/ {
 - Accessible within mainland China (no GFW issues)
 - Web server: nginx (static + reverse proxy)
 - 1GB swap configured (vm.swappiness=10)
-- UFW firewall: only 22, 80, 443 exposed
+- UFW firewall: 22, 80, 443, 6000, 7000, 7500 exposed
 - Add new projects to the "Deployed Projects" table above
+
+### frp Server (frps)
+
+```bash
+# frps config: /etc/frp/frps.toml
+# bindPort = 7000, auth.token = "csfilter2026frp"
+# Dashboard: http://YOUR_SERVER_IP:7500 (admin/admin123)
+
+# Service management
+sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
+```
+
+---
+
+# 2. 个人PC (via frp)
+
+无公网 IP 的内网机器，通过 frp 穿透访问。适合跑 headless Chrome 采集等重计算任务。
+
+## Connection
+
+| Field    | Value                                        |
+| -------- | -------------------------------------------- |
+| SSH      | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP`         |
+| 穿透方式 | frpc → Aliyun frps (port 7000)               |
+| User     | `mixiaomi`                                   |
+
+## Specs
+
+| Item   | Detail             |
+| ------ | ------------------ |
+| OS     | Ubuntu 24.04       |
+| CPU    | Intel i7-12700     |
+| Memory | 32 GiB (16+16)    |
+| Role   | 计算密集型任务      |
+
+## Git & GitHub
+
+- **已安装 `gh` CLI** (`/usr/bin/gh`)，已登录 Mixiaomiupup 账号
+- Git 操作协议: SSH
+- **代码不是 git 仓库**：工作站上的项目代码是直接复制的，没有 `.git` 目录
+- **更新代码方式**: 使用 `scp` 从本地推送文件，不用 `git pull`
+
+```bash
+# 推送文件到工作站（从本地 Mac 执行）
+scp -P 6000 path/to/file mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/path/to/file
+```
+
+## CSFilter 部署
+
+csfilter 的实际运行环境在这台工作站上（不在 Aliyun）。
+
+| 项目 | 值 |
+| ---- | -- |
+| App 路径 | `/home/mixiaomi/projects/csfilter` |
+| Venv | `/home/mixiaomi/projects/csfilter/.venv` |
+| DB | `/home/mixiaomi/projects/csfilter/database/csqaq.db` |
+| Logs | `/home/mixiaomi/projects/csfilter/logs/` |
+
+### Systemd 服务
+
+```bash
+# 服务管理
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
+
+# 停止/启动 scheduler
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl stop csfilter-scheduler"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl start csfilter-scheduler"
+
+# 查看日志
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "tail -50 /home/mixiaomi/projects/csfilter/logs/scheduler.log"
+```
+
+### 更新代码流程
+
+```bash
+# 1. 从本地 Mac 推送修改的文件
+scp -P 6000 run_scheduler.py mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/
+scp -P 6000 src/collector/mitm_proxy.py mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/src/collector/
+
+# 2. SSH 到工作站重启服务
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl restart csfilter-scheduler"
+```
+
+## Common Operations
+
+```bash
+# SSH connect (via frp tunnel)
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP
+
+# frpc service on this machine
+sudo systemctl status frpc
+```
+
+## Notes
+
+- 无公网 IP，依赖 frp 穿透（frpc → Aliyun frps:7000 → port 6000）
+- frpc 断线需重连，配置为 systemd 服务开机自启
+- 比 Aliyun 2C2G 性能强很多，适合跑 Chrome 采集、数据处理等任务
+- **已安装**: gh, python3, chrome, chromedriver, sqlite3(未安装)
