@@ -48,13 +48,19 @@ The script outputs to `X收藏/` subdirectory if it exists under the current wor
    - 若用户确认：
      a. 根据 `category` 的一级分类确定目标飞书节点（查 `lark-mcp` skill 的标签→节点映射表）
      b. 获取 `tenant_access_token`
-     c. 在目标节点下创建新文档节点（直接 API `POST /wiki/v2/spaces/{space_id}/nodes`）
-     d. 用 `docx_builtin_import` 导入 Markdown 内容
+     c. 用 curl 文件上传 + 导入任务发布文档（参考 `lark-mcp` skill 的「curl 文件上传导入」方法）
+     d. 用 curl 移入 wiki 对应节点
      e. 在本地文件 frontmatter 中追加：
         - `feishu_node_token: "<新节点的 node_token>"`
         - `feishu_sync_time: "<当前时间 ISO 格式>"`
      f. 报告同步成功，附带飞书节点信息
    - 若用户拒绝：跳过，仅保存本地
+   - **若用户要求推送到资讯 bot**：
+     a. 完成上述飞书知识库同步
+     b. 按 `lark-mcp` skill 的「资讯推送」工作流，获取 bot 可用范围内的所有用户
+     c. 构建卡片消息（标题 + 摘要 + 原文链接 + 知识库链接按钮）
+     d. 向所有用户发送私信（DM），而非群聊
+     e. 报告发送结果（成功/失败数量）
 5. Report the saved filename, article title, category, and tags to the user
 
 ## Supported Content Types

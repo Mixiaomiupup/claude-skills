@@ -31,7 +31,25 @@ digraph repo_choice {
 
 ## GitHub (`gh` CLI)
 
-Run via Bash tool. No extra setup needed.
+Run via Bash tool. Already configured:
+
+| Field | Value |
+|-------|-------|
+| Account | Mixiaomiupup |
+| Auth | `gh auth login` (keyring, token scopes: admin:public_key, gist, read:org, repo) |
+| Protocol | SSH |
+| user.name | `Mixiaomiupup` |
+| user.email | `38080030+Mixiaomiupup@users.noreply.github.com` |
+
+### Git Identity (Auto-configure)
+
+When git commit fails with "Author identity unknown", do NOT ask — just run:
+```bash
+gh auth setup-git
+git config user.name "Mixiaomiupup"
+git config user.email "38080030+Mixiaomiupup@users.noreply.github.com"
+```
+Then retry the commit.
 
 ### Quick Reference
 
