@@ -1,6 +1,6 @@
 # Claude Code Skills
 
-> 17 个自研 skill | 1 个第三方 | 6 大类
+> 18 个自研 skill | 1 个第三方 | 6 大类
 
 个人 Claude Code skill 合集，通过 `cc-sync` 同步至 GitHub 和云效。完整能力展示见[能力全景指南](https://huazhi-ai.feishu.cn/docx/ENUFdpeoxopStLxcU5pceHhnnUe)。
 
@@ -8,10 +8,13 @@
 
 | Skill | 分类 | 触发词 | 一句话 |
 |-------|------|--------|--------|
+| [article-gen](article-gen/SKILL.md) | 内容与知识 | X 链接 + "保存/分享" | 文章生成总编排（转换→enrichment→配图→发布） |
+| [x2md](x2md/SKILL.md) | 内容与知识 | X 链接 + "转换" | X/Twitter → Markdown 纯转换 |
 | [ucal](ucal/SKILL.md) | 内容与知识 | 给链接、"调研XX" | 跨平台内容深度分析与话题调研 |
 | [kb](kb/SKILL.md) | 内容与知识 | "记下来"、"搜知识库" | Obsidian 知识库管理 |
-| [x2md](x2md/SKILL.md) | 内容与知识 | X 链接 + "保存" | 推文/线程转 Markdown 存 Obsidian |
-| [cover-image](cover-image/SKILL.md) | 图像与媒体 | "配图"、"封面图" | 文章封面配图编排（风格选择 + 生成） |
+| [x-feed](x-feed/SKILL.md) | 内容与知识 | "twitter digest" | X/Twitter 信息流（发现账号、热点、日报） |
+| [feishu](feishu/SKILL.md) | 内容与知识 | 飞书操作 | 飞书知识库/文档/群聊/多维表格集成 |
+| [cover-image](cover-image/SKILL.md) | 图像与媒体 | "配图"、"封面图" | 文章封面配图（5D 风格 + 生图） |
 | [gemini-image](gemini-image/SKILL.md) | 图像与媒体 | "画一张"、"这图是什么" | Gemini AI 图片生成/编辑/理解 |
 | [review](review/SKILL.md) | 代码质量 | "review"、"审查" | 六维度代码审查 |
 | [python-style](python-style/SKILL.md) | 代码质量 | "check style" | PEP 8 风格检查 |
@@ -23,76 +26,79 @@
 | [explain](explain/SKILL.md) | 开发流程 | "explain this" | 代码图解 |
 | [server](server/SKILL.md) | 基础设施 | SSH、部署 | 阿里云服务器管理 |
 | [sync-config](sync-config/SKILL.md) | 基础设施 | "sync"、"备份配置" | 配置与 skill 双平台同步 |
-| [feishu](feishu/SKILL.md) | 内容与知识 | 飞书操作 | 飞书知识库/文档/群聊/多维表格集成 |
 | [doc-control](doc-control/SKILL.md) | 文档 | 创建/更新文档前 | 文档生成控制 |
+| [youpin](youpin/SKILL.md) | 工具 | "悠悠有品"、"收益" | CS2 饰品交易查询 |
 
 ---
 
 ## 内容与知识
 
+### [article-gen](article-gen/SKILL.md) — 文章生成总编排
+
+**最常用的入口 skill。** 用户给 X 链接说"保存"或"分享到飞书"时，就是它在统筹一切。
+
+自己不做具体操作，而是按需调用各专职 skill：
+
+```
+article-gen
+  ├── x2md ——— X → Markdown（纯转换）
+  ├── Claude ——— enrichment（分类/标签/摘要）+ 翻译
+  ├── cover-image ——— 封面配图（5D 风格 + 生图）
+  └── feishu ——— 飞书发布 + 全员广播
+```
+
+完整流程：转换 → enrichment → 翻译（非中文时）→ 配图 → 飞书发布 → 推送。每步可选跳过。
+
+**常用说法**：`保存这条推文`、`分享到飞书`、给 X 链接
+
+---
+
+### [x2md](x2md/SKILL.md) — X/Twitter → Markdown
+
+**纯转换工具**，把推文/线程/长文转成 Markdown 文件存进 Obsidian，`status: raw`。不做 enrichment、翻译、配图、发布。这些都是 `article-gen` 的事。
+
+支持三种内容：X Article（长文）、Regular tweet、Thread。
+
+**常用说法**：直接给 X 链接（由 article-gen 调用，通常不需要单独触发）
+
+---
+
 ### [ucal](ucal/SKILL.md) — 跨平台内容分析与话题调研
 
-这是花了最多心思打磨的 skill 之一。核心思路是：ucal MCP 解决"怎么取数据"，skill 解决"取到后怎么分析"。
+核心思路：ucal MCP 解决"怎么取数据"，skill 解决"取到后怎么分析"。
 
 **两个模式**：
 
-- **Read 模式** — 给一个链接，自动识别平台，按平台特征差异化分析。不是简单总结正文，而是根据平台内容结构做不同侧重：
-  - **小红书**：帖子本身就几句话，真正的信息在评论区。分析重心放在评论观点图谱 — 合并相似观点、提取争议焦点、挖出被忽略的独特视角
-  - **知乎**：长文答案，价值在论证结构。拆解核心论点、论据链、引用数据，并指出论证薄弱点
-  - **X/Twitter**：推文短小，重点在观点提炼和传播度分析（转赞比异常检测）
-  - **通用网页**：纯内容提炼
+- **Read 模式** — 给链接，按平台差异化分析（小红书重评论观点图谱、知乎重论证结构、X 重观点提炼）
+- **Research 模式** — "调研XX"触发，完整调研流程（问题锐化→选帖策略→Pre-read hypothesis→证据追踪→叙事报告）
 
-- **Research 模式** — 说"调研XX"触发。这是一个完整的调研流程，不是简单搜几篇凑一起：
-  1. **问题锐化**：不直接搜原始词，先拆成子问题，生成语义变体搜索词（比如"调研火锅蘸料"→ 拆出"选择决策/身份认同/情绪争议"三个角度）
-  2. **选帖策略**：从搜索结果中选 3-4 篇，要求互动量梯度（高+低）、立场分布（正+反）、作者多样性
-  3. **Pre-read hypothesis**：读之前先写预期，读完后对照验证 — 被证实的、被推翻的、意外发现的
-  4. **证据追踪**：每个判断都要挂引用证据和来源，区分"直接发现"和"推断"
-  5. **反思决策**：默认 SUFFICIENT，只有能说出具体缺口和具体搜索词时才追搜（上限 6 篇）
-  6. **叙事报告**：不按帖子顺序排列，按洞察惊喜度排列。包含"扎心原文"（情感冲击力最强的评论）和"社区真正在争什么"（挖争议背后的断层线）
+**常用说法**：`帮我看看这个链接`、`调研XX话题`
 
-**常用说法**：`帮我看看这个链接`、`分析一下`、`调研XX话题`、`大家怎么看`
+---
+
+### [x-feed](x-feed/SKILL.md) — X/Twitter 信息流
+
+四种模式：discover（发现账号）、digest（热点日报）、deep-save（委托 article-gen）、report（周/月总结）。
+
+**常用说法**：`twitter digest`、`discover people to follow`
 
 ---
 
 ### [kb](kb/SKILL.md) — Obsidian 知识库管理
 
-管理 `~/Documents/obsidian/mixiaomi` vault，六种模式覆盖知识管理全流程：
+六种模式：write / search / synthesize / insight / browse / sync。
 
-- **write**：写笔记/记点子，自动按内容类型分目录（创意点子/知识库/Vibe Coding），带 9 类标签体系的 frontmatter
-- **search**：在 vault 中搜索内容（支持本地/飞书/全部）
-- **synthesize**：跨笔记综合分析，生成综合笔记
-- **insight**：追加个人洞察和反思
-- **browse**：列出 vault 内容概览
-- **sync**：双向同步飞书知识库（Push 本地更新 / Pull 飞书新文档）
+与 x2md 有明确边界：X 链接一律拒绝，提示走 article-gen。
 
-与 x2md 有明确边界：X/Twitter 链接一律拒绝，提示走 x2md。
-
-**常用说法**：`记个点子`、`记下来`、`搜一下知识库`、`总结一下XX主题`、`同步飞书`
-
----
-
-### [x2md](x2md/SKILL.md) — 推文转 Markdown
-
-把 X/Twitter 的推文、线程、长文转成干净的 Markdown 存进 Obsidian。不只是格式转换 — 保存后还会做 AI enrichment：自动分类（9 个类目如 AI/发展、技术/趋势、商业/创业等）、打标签、写中文摘要，把 `status` 从 `raw` 改为 `enriched`。
-
-**常用说法**：`保存这条推文`、给一个 x.com 链接
+**常用说法**：`记个点子`、`搜一下知识库`、`同步飞书`
 
 ---
 
 ### [feishu](feishu/SKILL.md) — 飞书集成
 
-飞书平台的全面集成，覆盖知识库、文档、群聊、多维表格四大场景。通过 Lark MCP Server 连接飞书开放平台 API，支持 17 个验证可用的 MCP 工具。
+飞书平台的全面集成，覆盖知识库、文档、群聊、多维表格。被 article-gen、kb、x-feed 调用来完成飞书端操作。
 
-**核心能力**：
-
-- **知识库操作**：浏览 wiki 节点树、获取节点信息、读取文档内容、导入 Markdown 文档、发布到知识库
-- **文档操作**：导入/读取飞书文档，支持 Markdown 到 docx 的自动转换
-- **群聊操作**：列出群组、获取成员、查看聊天记录、发送消息
-- **多维表格**：创建应用/表格、搜索记录、创建/更新记录
-
-**与 kb 的协作**：kb skill 的 sync 模式调用 feishu skill 实现本地 Obsidian ↔ 飞书知识库的双向同步。
-
-**常用场景**：`发布文档到飞书`、`看看飞书知识库`、`飞书群里发个消息`
+**常用场景**：`发布文档到飞书`、`看看飞书知识库`
 
 ---
 
@@ -100,13 +106,9 @@
 
 ### [cover-image](cover-image/SKILL.md) — 文章封面配图
 
-编排 skill，不自己生成图片，而是串联「风格决策」和「图片生成」两个环节：
+**自包含**的配图 skill。内化 5D 风格体系（type/palette/rendering/text/mood），自己做风格决策，调用 `gemini-image` 生成图片。
 
-1. 分析文章内容和 category，调用 `baoyu-cover-image`（第三方）的 5D 自动选择规则确定风格参数
-2. 基于风格参数构建 prompt，调用 `gemini-image` 生成图片
-3. 将图片嵌入文章（`![[]]` 引用 + frontmatter `cover` 字段）
-
-被 x2md、kb、x-feed 等 skill 在 enrichment 阶段调用，也可由用户直接触发。
+被 `article-gen` 在 enrichment 后调用，也可由用户直接触发。
 
 **常用说法**：`给这篇文章配图`、`封面图`
 
@@ -114,26 +116,22 @@
 
 ### [gemini-image](gemini-image/SKILL.md) — Gemini AI 图片工具
 
-通过 Vertex AI 调用 Gemini 模型，三种模式：
+通过 Vertex AI 调用 Gemini 模型。三种模式：generate（文字→图片）、edit（修改图片）、understand（分析图片）。
 
-- **generate**：文字描述生成图片，支持写实、水彩、插画、油画、3D 等风格
-- **edit**：在现有图片上修改（加元素、换风格、去除物体）
-- **understand**：分析图片内容，回答关于图片的问题
+被 `cover-image` 调用来执行实际生成，也可由用户直接触发做自由生图。
 
-**常用说法**：`画一张日落`、`这张图里是什么`、`给照片加彩虹`、`generate a logo`
+**常用说法**：`画一张日落`、`这张图里是什么`
 
 ---
 
 ## 代码质量
 
-日常写代码用的一组工具，各司其职：
-
 | Skill | 做什么 | 说一句 |
 |-------|--------|--------|
-| [review](review/SKILL.md) | 安全/正确性/性能/可读性/可维护/最佳实践，六个维度扫一遍，按 critical/important/optional 分级 | `review 一下` |
-| [python-style](python-style/SKILL.md) | 用 ruff/black/isort/mypy 检查 PEP 8，自动修复 | `check style` |
+| [review](review/SKILL.md) | 安全/正确性/性能/可读性/可维护/最佳实践，六个维度扫一遍 | `review 一下` |
+| [python-style](python-style/SKILL.md) | ruff/black/isort/mypy 检查 PEP 8，自动修复 | `check style` |
 | [refactor](refactor/SKILL.md) | 找 code smell，检查 SOLID，给出 before/after 对比 | `重构这段` |
-| [debug](debug/SKILL.md) | 理解问题 → 复现 → 假设 → 隔离 → 验证修复，系统性调试 | `帮我 debug` |
+| [debug](debug/SKILL.md) | 理解→复现→假设→隔离→验证，系统性调试 | `帮我 debug` |
 | [test](test/SKILL.md) | Arrange-Act-Assert 模式，支持 Python/JS/TS/Go | `写测试` |
 
 ---
@@ -142,9 +140,9 @@
 
 | Skill | 做什么 | 说一句 |
 |-------|--------|--------|
-| [commit](commit/SKILL.md) | 按 Google convention 生成 commit message，支持 feat/fix/chore 等类型 | `提交` |
-| [remote-repos](remote-repos/SKILL.md) | 双平台操作 — GitHub 用 gh CLI，云效用 MCP，覆盖 repo/branch/PR/CI/CD | `create PR`、`push` |
-| [explain](explain/SKILL.md) | 用全局概览、ASCII 图、类比、逐步分解来解释代码，适配不同水平 | `explain this` |
+| [commit](commit/SKILL.md) | 按 Google convention 生成 commit message | `提交` |
+| [remote-repos](remote-repos/SKILL.md) | 双平台操作 — GitHub gh CLI + 云效 MCP | `create PR` |
+| [explain](explain/SKILL.md) | 全局概览 + ASCII 图 + 类比 + 逐步分解 | `explain this` |
 
 ---
 
@@ -152,43 +150,19 @@
 
 ### [sync-config](sync-config/SKILL.md) — 配置同步系统 (cc-sync)
 
-另一个花了大力气的 skill。解决的问题：Claude Code 的配置散落在 `~/.claude/` 下的十几个文件和目录里（CLAUDE.md、settings、hooks、agents、commands、plans、plugins、15 个 skill...），怎么在多台机器间保持同步，怎么安全地推到远程仓库。
-
-**架构设计**：
-
-配置和 skill 拆成两个独立 Git 仓库，各自推到 GitHub + 云效双平台：
-
-| 组件 | 仓库 | 内容 |
-|------|------|------|
-| **config** | `claude-config` | CLAUDE.md、settings、hooks、agents、commands、output-styles、plans 基础设施、plugins |
-| **skills** | `claude-skills` | 15 个自研 skill（不含第三方） |
-| **第三方** | 各自独立仓库 | baoyu-skills 等，通过 `component-manifest.json` 追踪 |
-
-**核心机制**：
-
-- **脱敏系统**：推送前自动替换敏感信息 — settings.json 里的 API token、server/SKILL.md 里的密码和 IP、gemini-image/SKILL.md 里的 GCP 凭据。规则在 `component-manifest.json` 的 `sanitize` 字段里声明，cc-sync 通用循环遍历处理
-- **Staging 隔离**：不直接操作本地文件，先 rsync 到 `/private/tmp/` 下的 staging 目录，在 staging 里脱敏、diff、commit，再 push
-- **Dry-run 优先**：每次推送先 `--dry-run` 预览变更，确认后再执行
-- **锁机制**：防止并发 push 冲突
-- **Pull 恢复**：新机器上三步 bootstrap — clone config repo、复制 cc-sync 脚本、`cc-sync pull`，本地 token 会自动保留
-
-**常用命令**：
+配置和 skill 拆成两个 Git 仓库，推到 GitHub + 云效双平台。自带脱敏系统、staging 隔离、dry-run 预览。
 
 ```bash
-cc-sync status                    # 查看同步状态
-cc-sync push --dry-run            # 预览变更
-cc-sync push --yes                # 推送（跳过确认）
-cc-sync push --target skills      # 只推 skills
-cc-sync pull                      # 从远程拉取恢复
+cc-sync push --dry-run    # 预览
+cc-sync push --yes        # 推送
+cc-sync pull              # 拉取恢复
 ```
 
 ---
 
 ### [server](server/SKILL.md) — 阿里云服务器
 
-阿里云 Ubuntu 服务器管理（华东 2，2 vCPU / 2 GiB），SSH 连接、部署流程、nginx 配置、服务管理。
-
-**常用说法**：`部署`、`看看服务器状态`
+阿里云 Ubuntu 服务器管理，SSH 连接、部署、nginx、服务管理。
 
 ---
 
@@ -196,13 +170,21 @@ cc-sync pull                      # 从远程拉取恢复
 
 ### [doc-control](doc-control/SKILL.md) — 文档生成控制
 
-防止过度文档化的门控。把变更分为 Level 1-3，检查项目文档模式（strict/standard/comprehensive），决定该创建、更新还是跳过文档。
+防止过度文档化的门控。Level 1-3 分级，检查文档模式，决定创建/更新/跳过。
+
+---
+
+## 工具
+
+### [youpin](youpin/SKILL.md) — CS2 饰品交易查询
+
+悠悠有品平台只读查询：订单、库存、收益统计、市场行情。严禁买卖操作。
 
 ---
 
 ## Skill 联动
 
-Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只做一件事，通过组合完成复杂流程。
+Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只做一件事，通过 `article-gen` 等编排 skill 组合完成复杂流程。
 
 ### 联动关系图
 
@@ -210,44 +192,38 @@ Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只
 用户给 X 链接
     │
     ▼
-  x2md ──────────────────────────────────────────────┐
-    │ step 1: x2md.py 抓取转 Markdown                │
-    │ step 2: Claude enrichment（分类/标签/摘要）      │
-    │ step 3g: 委托 cover-image 生成封面               │
-    │ step 4: 委托 feishu 发布知识库 + 广播            │
-    │                                                  │
-    ▼                                                  │
-  cover-image ◄────────────────────────────────────────┘
-    │ 分析文章内容
-    │ 调用 baoyu-cover-image 5D 规则 → 确定风格
-    │ 调用 gemini-image generate → 生成图片
-    │ 嵌入文章（![[]] + frontmatter cover）
+  article-gen (总编排)
     │
-  feishu ◄── kb（sync 模式）◄── x-feed（digest 发布）
-    │ 认证 + 文件上传 + 导入 + wiki 挂载
-    │ 广播卡片私信
+    ├── 1. x2md ───── X → Markdown（纯转换，status: raw）
+    │
+    ├── 2. Claude ──── enrichment（分类/标签/摘要）+ 翻译
+    │
+    ├── 3. cover-image ── 风格决策(5D) + gemini-image(生图) → 嵌入文章
+    │
+    └── 4. feishu ───── 发布知识库 + 广播卡片私信
 ```
 
 ### 调用关系表
 
-| 调用方 | 被调用方 | 场景 | 传递信息 |
-|--------|---------|------|---------|
-| `x2md` | `cover-image` | 推文 enrichment 阶段（step 3g） | 文章路径、category |
-| `x2md` | `feishu` | 飞书发布阶段（step 4） | .md 文件、category→节点映射 |
-| `x-feed` | `x2md` | deep-save 模式 | X 链接 |
-| `x-feed` | `feishu` | digest 发布 + 广播 | 日报 .md、摘要 |
-| `kb` | `feishu` | sync 模式（push/pull） | 本地 .md ↔ 飞书文档 |
-| `cover-image` | `baoyu-cover-image` | 风格决策 | 文章内容、category |
-| `cover-image` | `gemini-image` | 图片生成 | prompt、输出路径 |
+| 调用方 | 被调用方 | 场景 |
+|--------|---------|------|
+| `article-gen` | `x2md` | X 链接转 Markdown |
+| `article-gen` | `cover-image` | enrichment 后生成封面 |
+| `article-gen` | `feishu` | 发布 + 广播 |
+| `cover-image` | `gemini-image` | 实际图片生成 |
+| `x-feed` | `article-gen` | deep-save 模式 |
+| `x-feed` | `feishu` | digest 发布 + 广播 |
+| `kb` | `feishu` | sync 模式（push/pull） |
 
 ### 边界规则
 
 | 规则 | 说明 |
 |------|------|
-| X 链接 → `x2md` | `kb` 拒绝处理 X 链接，提示走 x2md |
-| 图片生成 → `gemini-image` | `cover-image` 不直接生图，只编排 |
-| 风格决策 → `baoyu-cover-image` | `cover-image` 不自己定义风格体系，引用第三方 |
-| 飞书操作 → `feishu` | 其他 skill 不直接调飞书 API，统一经 feishu skill |
+| 完整文章流程 → `article-gen` | 不要直接调 x2md + enrichment + 发布，用 article-gen 统筹 |
+| 纯转换 → `x2md` | x2md 只管 X → Markdown，不做 enrichment |
+| 配图 → `cover-image` | 自包含 5D 风格体系，不再转发 baoyu-cover-image |
+| 生图 → `gemini-image` | cover-image 调它，用户也可直接调 |
+| 飞书操作 → `feishu` | 其他 skill 不直接调飞书 API |
 | MCP 工具名 ≠ skill 名 | `mcp__lark-mcp__*` 是 MCP server 工具名，`feishu` 是 skill 名 |
 
 ---
@@ -263,5 +239,5 @@ Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只
 ```bash
 cc-sync push --target skills --dry-run   # 预览 skill 变更
 cc-sync push --target skills --yes       # 推送
-cc-sync status                           # 查看状态（应显示 16/16）
+cc-sync status                           # 查看状态
 ```

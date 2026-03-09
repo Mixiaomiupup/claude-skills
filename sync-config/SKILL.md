@@ -99,7 +99,7 @@ digraph sync_flow {
 
 | Category | Items |
 |----------|-------|
-| First-party | 17 skills: commit, cover-image, debug, doc-control, explain, feishu, gemini-image, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
+| First-party | 18 skills: article-gen, commit, cover-image, debug, doc-control, explain, feishu, gemini-image, kb, python-style, refactor, remote-repos, review, server, sync-config, test, ucal, x2md |
 | Sanitized | `server/SKILL.md` (passwords/IPs → placeholders), `gemini-image/SKILL.md` (GCP credentials → placeholders) |
 | Excluded | `baoyu-skills` (has own git repo, tracked in manifest) |
 

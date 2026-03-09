@@ -1,88 +1,46 @@
 ---
 name: x2md
-description: Convert X/Twitter posts, threads, and long-form articles to Markdown and save to Obsidian vault. Use when user provides an X/Twitter URL (x.com, twitter.com) and wants to save it as a note, or asks to clip/save/convert a tweet or X article to markdown/Obsidian.
+description: "Convert X/Twitter posts, threads, and long-form articles to Markdown. Pure conversion only — no enrichment, no publishing. Use when user provides an X/Twitter URL (x.com, twitter.com) and wants to convert it to markdown. For the full pipeline (enrich + cover + publish), use article-gen skill instead."
 ---
 
 # X/Twitter to Markdown
 
-Convert X/Twitter content to clean Markdown with structured frontmatter, save to Obsidian vault, and enrich with AI-generated classification.
+将 X/Twitter 内容转为干净的 Markdown 文件，带结构化 frontmatter。**纯转换**，不做 enrichment、翻译、配图、发布。
 
 ## Usage
 
-Run the bundled script with the tweet URL:
-
 ```bash
-python3 ~/.claude/skills/x2md/scripts/x2md.py "<URL>"
+cd ~/Documents/obsidian/mixiaomi && python3 ~/.claude/skills/x2md/scripts/x2md.py "<URL>"
 ```
 
-The script outputs to `具身行业资讯/` subdirectory if it exists under the current working directory (fallback to `X收藏/`), otherwise to the current directory.
+输出到 `具身行业资讯/` 子目录（fallback `X收藏/`），同时复制到剪贴板。
 
 ## Workflow
 
-1. Extract the URL from user input (supports `x.com` and `twitter.com` links)
-2. Run the script from the Obsidian vault directory:
-   ```bash
-   cd ~/Documents/obsidian/mixiaomi && python3 ~/.claude/skills/x2md/scripts/x2md.py "<URL>"
-   ```
-3. **Enrich the saved file** — Read the saved `.md` file and perform Claude enrichment:
-   a. Analyze the article content (title, body text, context)
-   a2. **翻译规则**：如果 `lang` 不是 `zh`（即非中文内容），在正文区域插入中文翻译。结构为：
-       - 先放翻译（中文），以 `## 翻译` 标题开头
-       - 再放原文，以 `## 原文` 标题开头
-       - 翻译要求：信达雅，保留专有名词不翻译，技术术语保留英文并括号注中文
-   b. Determine the best-fit **category** from the taxonomy:
-      - `AI/发展` — 模型发布、能力进展、AGI
-      - `AI/应用` — 工具、工作流、Agent
-      - `AI/影响` — 就业、社会、伦理
-      - `技术/趋势` — MCP、CLI-first、平台趋势
-      - `技术/开发` — 编程技巧、架构、Vibe Coding
-      - `商业/创业` — 创业、融资、商业
-      - `商业/产品` — 产品思维、UX
-      - `思考/创意` — 灵感、创新方法
-      - `思考/社会` — 监管、哲学、未来
-   c. Assign 1-3 **tags** (hierarchical format, e.g. `AI/发展`, `AI/影响`)
-   d. Write a **summary** as 3-5 bullet points (Chinese, concise)
-   e. Update the frontmatter:
-      - Fill in `tags` (as YAML list)
-      - Fill in `category`
-      - Fill in `summary` (as YAML list)
-      - Change `status` from `raw` to `enriched`
-   f. Append a `## 我的笔记` section at the end of the file (empty, for future dialog notes)
-   g. **生成封面配图** — 调用 `cover-image` skill（quick 模式），传入文章路径和 category
-4. **飞书同步确认** — 询问用户「是否同步到飞书知识库？」
-   - 若用户确认：
-     a. 根据 `category` 的一级分类确定目标飞书节点（查 `feishu` skill 的标签→节点映射表）
-     b. 获取 `tenant_access_token`
-     c. 用 curl 文件上传 + 导入任务发布文档（参考 `feishu` skill 的「curl 文件上传导入」方法）
-     d. 用 curl 移入 wiki 对应节点
-     e. 在本地文件 frontmatter 中追加：
-        - `feishu_node_token: "<新节点的 node_token>"`
-        - `feishu_sync_time: "<当前时间 ISO 格式>"`
-     f. 报告同步成功，附带飞书节点信息
-   - 若用户拒绝：跳过，仅保存本地
-   - **若用户要求推送到资讯 bot**：
-     a. 完成上述飞书知识库同步
-     b. 按 `feishu` skill 的「资讯推送」工作流，获取 bot 可用范围内的所有用户
-     c. 构建卡片消息（标题 + 摘要 + 原文链接 + 知识库链接按钮）
-     d. 向所有用户发送私信（DM），而非群聊
-     e. 报告发送结果（成功/失败数量）
-5. Report the saved filename, article title, category, and tags to the user
+1. 从用户输入提取 URL（支持 `x.com` 和 `twitter.com`）
+2. 运行脚本，生成 `.md` 文件
+3. 报告保存路径和文件名
+
+完成。后续 enrichment、配图、翻译、飞书发布由 `article-gen` skill 统筹。
 
 ## Supported Content Types
 
-- **X Article (long-form)** — Full article with title, headings, bold/italic, images
-- **Regular tweets** — Single tweets with media and quoted tweets
-- **Threads** — Auto-traces reply chains to reconstruct full thread
+| 类型 | 说明 |
+|------|------|
+| **X Article** | 长文，含标题、小标题、粗斜体、图片 |
+| **Regular tweet** | 单条推文，含媒体和引用推文 |
+| **Thread** | 自动追溯回复链，重组完整线程 |
 
 ## Output Format
 
-- Filename: `<作者> - <标题>.md` (Article uses article title, single tweet takes first 30 chars, thread indicates count)
-- Location: `具身行业资讯/` subdirectory under the vault root
-- Content: YAML frontmatter + clean Markdown with metadata (author, date, source link), cover image, headings, inline styles, and embedded images
-- Frontmatter fields: title, author, author_handle, source, type, date, saved_at, lang, likes, retweets, views, tags, category, summary, status, feishu_node_token (optional), feishu_sync_time (optional)
-- Also copied to clipboard (macOS)
+- **文件名**: `<作者> - <标题>.md`（长文用标题，单推取前 30 字，线程标注条数）
+- **位置**: `具身行业资讯/` 子目录
+- **内容**: YAML frontmatter + 正文 Markdown（作者、日期、来源链接、标题、行内样式、嵌入图片）
+- **剪贴板**: macOS 自动复制
 
-## Frontmatter Example
+## Frontmatter
+
+脚本生成的 frontmatter 含原始元数据，`status: raw`：
 
 ```yaml
 ---
@@ -97,16 +55,11 @@ lang: en
 likes: 12500
 retweets: 3200
 views: 850000
-tags:
-  - AI/发展
-  - AI/影响
-category: AI/发展
-summary:
-  - AI 能力在 2026 年 2 月出现质变，作者已不再需要亲自完成技术工作
-  - GPT-5.3 Codex 和 Opus 4.6 同日发布标志新时代
-  - 1-5 年内 50% 入门级白领工作可能被 AI 取代
-status: enriched
-feishu_node_token: ""          # 飞书节点 token（同步后自动填充）
-feishu_sync_time: ""           # 最后同步时间（同步后自动填充）
+tags: []
+category: ""
+summary: []
+status: raw
 ---
 ```
+
+`tags`、`category`、`summary`、`status` 由 `article-gen` skill 在 enrichment 阶段填充。
