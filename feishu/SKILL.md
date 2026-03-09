@@ -1,5 +1,5 @@
 ---
-name: lark-mcp
+name: feishu
 description: Use when accessing Feishu/Lark resources via MCP - wiki knowledge base, documents, chats, bitable. Also use when Lark MCP token errors occur (99991663, "invalid access token", "user access token is not configured").
 ---
 
