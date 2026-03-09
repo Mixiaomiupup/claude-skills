@@ -22,7 +22,7 @@
 | [explain](explain/SKILL.md) | 开发流程 | "explain this" | 代码图解 |
 | [server](server/SKILL.md) | 基础设施 | SSH、部署 | 阿里云服务器管理 |
 | [sync-config](sync-config/SKILL.md) | 基础设施 | "sync"、"备份配置" | 配置与 skill 双平台同步 |
-| [lark-mcp](lark-mcp/SKILL.md) | 内容与知识 | 飞书操作 | 飞书知识库/文档/群聊/多维表格集成 |
+| [feishu](feishu/SKILL.md) | 内容与知识 | 飞书操作 | 飞书知识库/文档/群聊/多维表格集成 |
 | [doc-control](doc-control/SKILL.md) | 文档 | 创建/更新文档前 | 文档生成控制 |
 
 ---
@@ -78,7 +78,7 @@
 
 ---
 
-### [lark-mcp](lark-mcp/SKILL.md) — 飞书 MCP 集成
+### [feishu](feishu/SKILL.md) — 飞书集成
 
 飞书平台的全面集成，覆盖知识库、文档、群聊、多维表格四大场景。通过 Lark MCP Server 连接飞书开放平台 API，支持 17 个验证可用的 MCP 工具。
 
@@ -89,7 +89,7 @@
 - **群聊操作**：列出群组、获取成员、查看聊天记录、发送消息
 - **多维表格**：创建应用/表格、搜索记录、创建/更新记录
 
-**与 kb 的协作**：kb skill 的 sync 模式调用 lark-mcp 实现本地 Obsidian ↔ 飞书知识库的双向同步。
+**与 kb 的协作**：kb skill 的 sync 模式调用 feishu skill 实现本地 Obsidian ↔ 飞书知识库的双向同步。
 
 **常用场景**：`发布文档到飞书`、`看看飞书知识库`、`飞书群里发个消息`
 

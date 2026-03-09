@@ -1,0 +1,38 @@
+# Core accounts for x-feed skill
+# digest mode prioritizes these accounts' tweets
+# Edit freely to add/remove accounts
+
+ai_research:
+  - karpathy
+  - ylecun
+  - sama
+  - AnthropicAI
+  - OpenAI
+
+ai_products:
+  - trq212
+  - bcherny
+  - ryolu_
+  - cursor_ai
+  - dotey
+
+indie_dev:
+  - lxfater
+  - Leobai825
+  - yanhua1010
+  - wquguru
+  - BrettFromDJ
+
+tech_thought:
+  - karpathy
+  - thedankoe
+  - LongChenNotes
+  - frxiaobei
+
+# Seed accounts for discover mode cross-analysis
+discover_seeds:
+  - sama
+  - karpathy
+  - AnthropicAI
+  - trq212
+  - dotey
