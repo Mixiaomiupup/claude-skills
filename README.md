@@ -1,6 +1,6 @@
 # Claude Code Skills
 
-> 16 个自研 skill | 1 个第三方 | 6 大类
+> 17 个自研 skill | 1 个第三方 | 6 大类
 
 个人 Claude Code skill 合集，通过 `cc-sync` 同步至 GitHub 和云效。完整能力展示见[能力全景指南](https://huazhi-ai.feishu.cn/docx/ENUFdpeoxopStLxcU5pceHhnnUe)。
 
@@ -11,6 +11,7 @@
 | [ucal](ucal/SKILL.md) | 内容与知识 | 给链接、"调研XX" | 跨平台内容深度分析与话题调研 |
 | [kb](kb/SKILL.md) | 内容与知识 | "记下来"、"搜知识库" | Obsidian 知识库管理 |
 | [x2md](x2md/SKILL.md) | 内容与知识 | X 链接 + "保存" | 推文/线程转 Markdown 存 Obsidian |
+| [cover-image](cover-image/SKILL.md) | 图像与媒体 | "配图"、"封面图" | 文章封面配图编排（风格选择 + 生成） |
 | [gemini-image](gemini-image/SKILL.md) | 图像与媒体 | "画一张"、"这图是什么" | Gemini AI 图片生成/编辑/理解 |
 | [review](review/SKILL.md) | 代码质量 | "review"、"审查" | 六维度代码审查 |
 | [python-style](python-style/SKILL.md) | 代码质量 | "check style" | PEP 8 风格检查 |
@@ -97,6 +98,20 @@
 
 ## 图像与媒体
 
+### [cover-image](cover-image/SKILL.md) — 文章封面配图
+
+编排 skill，不自己生成图片，而是串联「风格决策」和「图片生成」两个环节：
+
+1. 分析文章内容和 category，调用 `baoyu-cover-image`（第三方）的 5D 自动选择规则确定风格参数
+2. 基于风格参数构建 prompt，调用 `gemini-image` 生成图片
+3. 将图片嵌入文章（`![[]]` 引用 + frontmatter `cover` 字段）
+
+被 x2md、kb、x-feed 等 skill 在 enrichment 阶段调用，也可由用户直接触发。
+
+**常用说法**：`给这篇文章配图`、`封面图`
+
+---
+
 ### [gemini-image](gemini-image/SKILL.md) — Gemini AI 图片工具
 
 通过 Vertex AI 调用 Gemini 模型，三种模式：
@@ -182,6 +197,58 @@ cc-sync pull                      # 从远程拉取恢复
 ### [doc-control](doc-control/SKILL.md) — 文档生成控制
 
 防止过度文档化的门控。把变更分为 Level 1-3，检查项目文档模式（strict/standard/comprehensive），决定该创建、更新还是跳过文档。
+
+---
+
+## Skill 联动
+
+Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只做一件事，通过组合完成复杂流程。
+
+### 联动关系图
+
+```
+用户给 X 链接
+    │
+    ▼
+  x2md ──────────────────────────────────────────────┐
+    │ step 1: x2md.py 抓取转 Markdown                │
+    │ step 2: Claude enrichment（分类/标签/摘要）      │
+    │ step 3g: 委托 cover-image 生成封面               │
+    │ step 4: 委托 feishu 发布知识库 + 广播            │
+    │                                                  │
+    ▼                                                  │
+  cover-image ◄────────────────────────────────────────┘
+    │ 分析文章内容
+    │ 调用 baoyu-cover-image 5D 规则 → 确定风格
+    │ 调用 gemini-image generate → 生成图片
+    │ 嵌入文章（![[]] + frontmatter cover）
+    │
+  feishu ◄── kb（sync 模式）◄── x-feed（digest 发布）
+    │ 认证 + 文件上传 + 导入 + wiki 挂载
+    │ 广播卡片私信
+```
+
+### 调用关系表
+
+| 调用方 | 被调用方 | 场景 | 传递信息 |
+|--------|---------|------|---------|
+| `x2md` | `cover-image` | 推文 enrichment 阶段（step 3g） | 文章路径、category |
+| `x2md` | `feishu` | 飞书发布阶段（step 4） | .md 文件、category→节点映射 |
+| `x-feed` | `x2md` | deep-save 模式 | X 链接 |
+| `x-feed` | `feishu` | digest 发布 + 广播 | 日报 .md、摘要 |
+| `kb` | `feishu` | sync 模式（push/pull） | 本地 .md ↔ 飞书文档 |
+| `cover-image` | `baoyu-cover-image` | 风格决策 | 文章内容、category |
+| `cover-image` | `gemini-image` | 图片生成 | prompt、输出路径 |
+
+### 边界规则
+
+| 规则 | 说明 |
+|------|------|
+| X 链接 → `x2md` | `kb` 拒绝处理 X 链接，提示走 x2md |
+| 图片生成 → `gemini-image` | `cover-image` 不直接生图，只编排 |
+| 风格决策 → `baoyu-cover-image` | `cover-image` 不自己定义风格体系，引用第三方 |
+| 飞书操作 → `feishu` | 其他 skill 不直接调飞书 API，统一经 feishu skill |
+| MCP 工具名 ≠ skill 名 | `mcp__lark-mcp__*` 是 MCP server 工具名，`feishu` 是 skill 名 |
 
 ---
 

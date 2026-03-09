@@ -48,18 +48,7 @@ The script outputs to `具身行业资讯/` subdirectory if it exists under the 
       - Fill in `summary` (as YAML list)
       - Change `status` from `raw` to `enriched`
    f. Append a `## 我的笔记` section at the end of the file (empty, for future dialog notes)
-   g. **生成封面配图** — 用 `baoyu-cover-image` skill 确定风格，用 `gemini-image` skill 生成图片：
-      - 调用 `baoyu-cover-image` skill 的自动选择规则，根据文章 category 和内容分析确定 5 维参数：
-        - **type**: hero（重大新闻）/ conceptual（抽象概念）/ typography（观点语录）/ metaphor（隐喻类比）/ scene（场景叙事）/ minimal（工具简讯）
-        - **palette**: 根据情绪选色板（warm/elegant/cool/dark/earth/vivid/pastel/mono/retro）
-        - **rendering**: flat-vector / hand-drawn / painterly / digital / pixel / chalk
-        - **text**: 是否含文字及密度
-        - **mood**: 整体情绪基调
-      - 基于 5 维参数和文章核心观点，构建图片生成 prompt
-      - 用 `gemini-image` skill 的 generate 模式生成封面图
-      - 保存图片到文章同目录，文件名与文章同名（`.png`）
-      - 在 Markdown 正文顶部（标题下方）插入 `![[<图片文件名>]]` 引用
-      - 在 frontmatter 中添加 `cover: "<图片文件名>"`
+   g. **生成封面配图** — 调用 `cover-image` skill（quick 模式），传入文章路径和 category
 4. **飞书同步确认** — 询问用户「是否同步到飞书知识库？」
    - 若用户确认：
      a. 根据 `category` 的一级分类确定目标飞书节点（查 `feishu` skill 的标签→节点映射表）
