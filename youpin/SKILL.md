@@ -2,8 +2,8 @@
 name: youpin
 description: >
   悠悠有品(youpin898) CS2 饰品交易平台 API 交互工具。只读查询，严禁买卖操作。
-  支持：查询买卖订单、订单详情、库存查看、钱包余额、商品在售列表、商品求购列表、收益统计分析、Excel导出。
-  当用户提到悠悠有品、youpin、交易记录、收益统计、持仓分析、订单查询、在售数、求购价、市场行情时使用。
+  支持：查询买卖订单、订单详情、库存查看、钱包余额、商品搜索（按名称查templateId）、商品在售列表、商品求购列表、收益统计分析、Excel导出。
+  当用户提到悠悠有品、youpin、交易记录、收益统计、持仓分析、订单查询、在售数、求购价、市场行情、搜索饰品、查饰品价格时使用。
   CRITICAL: 绝对禁止调用任何购买、出售、上架、下架、求购、发货相关接口。
 ---
 
@@ -69,17 +69,34 @@ JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通
   - `abradeText`: 磨损要求（如 "0.09-0.1"，可为 null）
 - 按价格从高到低排列
 
-**templateId 查找**: 悠悠有品的搜索 API 不对外暴露关键词过滤。通过以下方式获取 templateId：
-1. **交易历史桥接**（推荐）: 从买卖订单的 `productDetailList[].commodityTemplateId` 提取，按商品名称匹配
-2. **桥接工具**: PC 上 `/tmp/youpin_bridge.py`，用法:
-   - `python3 youpin_bridge.py --build` — 从交易历史构建 name→templateId 映射缓存
-   - `python3 youpin_bridge.py "红线"` — 按名称搜索并显示市场数据
-   - `python3 youpin_bridge.py "红线" 1` — 搜索并查询第1条的在售+求购
-3. **手动**: 用户在 APP 中找到商品页，从 URL 或页面信息获取
+### 3. 商品搜索（按名称查找 templateId）
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 搜索联想（自动补全） | `/api/homepage/search/match` | POST |
+| 搜索结果列表 | `/api/homepage/search/new/list` | POST |
+
+**搜索联想参数** (输入时实时调用):
+```json
+{"keyWords": "红线", "userId": "4709372", "listType": "10", "gameId": 730,
+ "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+```
+- 返回 `Data.dataList[]` — 每条: `commodityName`, `templateId`, `haveTemplateToggleList`
+- 最多返回 10 条
+- **关键**: 参数名是 `keyWords`（大写W），必须带 `userId` 和 `gameId`(整数)
+
+**搜索结果列表参数** (完整搜索结果，带价格和在售数):
+```json
+{"keyWords": "红线", "listType": 10, "gameId": 730, "pageIndex": 1, "pageSize": 20,
+ "listSortType": 0, "filterMap": {}, "minPrice": "", "maxPrice": "",
+ "userId": "4709372", "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+```
+- 返回 `Data.commodityTemplateList[]` — 每条: `Id`(=templateId), `CommodityName`, `Price`, `OnSaleCount`, `SteamPrice`
+- 注意: 大写字段名（`Data`, `Id`, `CommodityName`）
 
 **注意**: csfilter 的 `goods_id` 与悠悠有品的 `templateId` 是不同 ID 体系，需通过商品名称桥接
 
-### 3. 库存与商品查询
+### 4. 库存与商品查询
 
 | 功能 | API |
 |------|-----|
@@ -87,14 +104,14 @@ JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通
 | 在售商品（我的） | `/api/youpin/bff/new/commodity/v1/commodity/list/sell` |
 | 商品详情 | `GET /api/commodity/Commodity/Detail?Id=<id>` |
 
-### 4. 钱包余额
+### 5. 钱包余额
 
 | 功能 | API |
 |------|-----|
 | 账户信息 | `/api/youpin/bff/payment/v1/user/account/info` |
 | 钱包类型 | `/api/youpin/bff/payment/v1/user/account/wallet/type` |
 
-### 5. 收益统计分析
+### 6. 收益统计分析
 
 核心分析流程：
 

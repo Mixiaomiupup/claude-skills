@@ -110,25 +110,44 @@ CB = {
 
 订单列表: `data.orderList` 为数组。
 
-## 商品搜索与 templateId 查找
+## 商品搜索
 
-**搜索 API 现状**: 已测试的搜索端点均不支持关键词过滤:
-- `/api/homepage/search/match` — 返回 `Code: -1`
-- `/api/homepage/search/list` — 忽略 keyword，返回全量 30966 条
-- `/api/homepage/v4/template/querySellPagedList` — 忽略 keyword，返回热门商品
+### 搜索联想 (autocomplete)
 
-**templateId 获取方案**:
-1. 从交易历史（买卖订单）的 `productDetailList[].commodityTemplateId` 提取
-2. 桥接工具 `/tmp/youpin_bridge.py` 自动构建 name→templateId 缓存
+`POST /api/homepage/search/match`
 
-**search/list 响应字段**（大写 key，仅供参考，不支持过滤）:
-- `Data.commodityTemplateList[]`: Id, CommodityName, CommodityHashName, Price, OnSaleCount, SteamPrice, TypeName, Exterior, Quality, Rarity
+```json
+{"keyWords": "红线", "userId": "4709372", "listType": "10", "gameId": 730,
+ "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+```
+
+- **关键参数**: `keyWords`（大写W）、`userId`（必须）、`gameId`（整数730）
+- 返回 `Data.dataList[]`: `commodityName`, `templateId`, `haveTemplateToggleList`
+- 最多 10 条，用于自动补全
+
+### 搜索结果列表 (完整搜索)
+
+`POST /api/homepage/search/new/list`
+
+```json
+{"keyWords": "红线", "listType": 10, "gameId": 730, "pageIndex": 1, "pageSize": 20,
+ "listSortType": 0, "filterMap": {}, "minPrice": "", "maxPrice": "",
+ "userId": "4709372", "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+```
+
+- 返回 `Data.commodityTemplateList[]`: `Id`(=templateId), `CommodityName`, `Price`, `OnSaleCount`, `SteamPrice`, `CommodityHashName`, `TypeName`, `Exterior`, `Quality`, `Rarity`
+- 大写字段名，支持分页
+
+### 搜索 API 注意事项
+
+- 参数名 `keyWords` 大写 W，`gameId` 小写（整数），`listType` 整数或字符串均可
+- 必须包含 `userId`，否则返回空结果
+- 响应使用大写 key（`Code`, `Data`）
 
 ## 已知限制
 
 - `pageSize` 超过 20~30 返回空数据
 - 部分接口需要 `sign-token` + `sign-timestamp`（交易查询接口不需要）
-- 搜索接口疑似需要额外签名参数，当前无法按关键词过滤
 - Response 通常 gzip 压缩
 - Cookie `acw_tc` 由服务端设置，后续请求需携带
 - JWT Token 有效期约 35 天
