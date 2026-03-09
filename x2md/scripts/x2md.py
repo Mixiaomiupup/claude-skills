@@ -530,8 +530,8 @@ def main():
         safe_title = tweet_id
     filename = f"{display_name} - {safe_title}.md"
 
-    # 如果当前目录下存在 具身行业资讯/ 或 X收藏/ 子目录，则保存到其中
-    x_dir = os.path.join(os.getcwd(), "具身行业资讯")
+    # 如果当前目录下存在 行业资讯/ 子目录，则保存到其中
+    x_dir = os.path.join(os.getcwd(), "行业资讯")
     if not os.path.isdir(x_dir):
         x_dir = os.path.join(os.getcwd(), "X收藏")
     if os.path.isdir(x_dir):

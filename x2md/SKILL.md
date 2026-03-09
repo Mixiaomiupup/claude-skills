@@ -13,7 +13,7 @@ description: "Convert X/Twitter posts, threads, and long-form articles to Markdo
 cd ~/Documents/obsidian/mixiaomi && python3 ~/.claude/skills/x2md/scripts/x2md.py "<URL>"
 ```
 
-输出到 `具身行业资讯/` 子目录（fallback `X收藏/`），同时复制到剪贴板。
+输出到 `行业资讯/` 子目录（按 category 一级分类存入 AI/技术/商业/思考），同时复制到剪贴板。
 
 ## Workflow
 
@@ -34,7 +34,7 @@ cd ~/Documents/obsidian/mixiaomi && python3 ~/.claude/skills/x2md/scripts/x2md.p
 ## Output Format
 
 - **文件名**: `<作者> - <标题>.md`（长文用标题，单推取前 30 字，线程标注条数）
-- **位置**: `具身行业资讯/` 子目录
+- **位置**: `行业资讯/` 子目录
 - **内容**: YAML frontmatter + 正文 Markdown（作者、日期、来源链接、标题、行内样式、嵌入图片）
 - **剪贴板**: macOS 自动复制
 
