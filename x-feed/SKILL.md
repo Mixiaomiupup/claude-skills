@@ -140,7 +140,7 @@ status: enriched
 
 ### Step 6: Save & Publish
 
-1. Save to `~/Documents/obsidian/mixiaomi/知识库/X日报-YYYY-MM-DD.md`
+1. Save to `~/Documents/obsidian/mixiaomi/日报/X日报-YYYY-MM-DD.md`
 2. Frontmatter: `type: digest`, tags from content analysis, `category` matching dominant topic
 3. Publish to Feishu wiki and broadcast (see Step 7)
 
@@ -235,10 +235,10 @@ curl_json(['-X', 'POST',
 **父节点映射**：
 | 主 tag | parent_wiki_token | 飞书节点 |
 |--------|-------------------|---------|
-| `AI/*` | `IOsNwtIPdiLTYukHdgqcMIE9nad` | 具身行业资讯/AI |
-| `技术/*` | `T1mzw30Bkir5IKkzbx9cxDFHnDe` | 具身行业资讯/技术 |
-| `商业/*` | `EdB8wcEbeigCFPkYqUXcNpZWnlc` | 具身行业资讯/商业 |
-| `思考/*` | `Xps2wjrCiixmB3kUKZscWLQQnge` | 具身行业资讯/思考 |
+| `AI/*` | `IOsNwtIPdiLTYukHdgqcMIE9nad` | 行业资讯/AI |
+| `技术/*` | `T1mzw30Bkir5IKkzbx9cxDFHnDe` | 行业资讯/技术 |
+| `商业/*` | `EdB8wcEbeigCFPkYqUXcNpZWnlc` | 行业资讯/商业 |
+| `思考/*` | `Xps2wjrCiixmB3kUKZscWLQQnge` | 行业资讯/思考 |
 
 6. **获取 node_token**（等 3 秒让异步移动完成）：
 ```python
@@ -423,4 +423,4 @@ Managed in `references/core_accounts.yaml`. Read this file at the start of `dige
 
 ### 日报保存路径
 
-实际路径用中文目录: `~/Documents/obsidian/mixiaomi/知识库/X日报-YYYY-MM-DD.md`（非 SKILL.md 中写的 knowledge-base）。
+实际路径用中文目录: `~/Documents/obsidian/mixiaomi/日报/X日报-YYYY-MM-DD.md`。

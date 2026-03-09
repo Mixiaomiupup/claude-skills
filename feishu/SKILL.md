@@ -578,7 +578,7 @@ mcp__lark-mcp__docx_v1_document_rawContent
 2. 对比本地 vault 中已有的 `feishu_node_token`，找出新文档
 3. 用 `docx_v1_document_rawContent` 读取新文档内容
 4. 转换为 Markdown，添加 frontmatter（包含 `feishu_node_token` 和 `feishu_sync_time`）
-5. 根据来源节点确定本地目录（AI→知识库/, 技术→知识库/ 等）
+5. 根据来源节点确定本地目录（AI→行业资讯/AI/, 技术→行业资讯/技术/ 等）
 6. 保存到本地 vault
 
 ## Direct API Workarounds
