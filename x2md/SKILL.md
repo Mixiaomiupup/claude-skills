@@ -26,6 +26,10 @@ The script outputs to `具身行业资讯/` subdirectory if it exists under the 
    ```
 3. **Enrich the saved file** — Read the saved `.md` file and perform Claude enrichment:
    a. Analyze the article content (title, body text, context)
+   a2. **翻译规则**：如果 `lang` 不是 `zh`（即非中文内容），在正文区域插入中文翻译。结构为：
+       - 先放翻译（中文），以 `## 翻译` 标题开头
+       - 再放原文，以 `## 原文` 标题开头
+       - 翻译要求：信达雅，保留专有名词不翻译，技术术语保留英文并括号注中文
    b. Determine the best-fit **category** from the taxonomy:
       - `AI/发展` — 模型发布、能力进展、AGI
       - `AI/应用` — 工具、工作流、Agent
@@ -44,6 +48,18 @@ The script outputs to `具身行业资讯/` subdirectory if it exists under the 
       - Fill in `summary` (as YAML list)
       - Change `status` from `raw` to `enriched`
    f. Append a `## 我的笔记` section at the end of the file (empty, for future dialog notes)
+   g. **生成封面配图** — 用 `baoyu-cover-image` skill 确定风格，用 `gemini-image` skill 生成图片：
+      - 调用 `baoyu-cover-image` skill 的自动选择规则，根据文章 category 和内容分析确定 5 维参数：
+        - **type**: hero（重大新闻）/ conceptual（抽象概念）/ typography（观点语录）/ metaphor（隐喻类比）/ scene（场景叙事）/ minimal（工具简讯）
+        - **palette**: 根据情绪选色板（warm/elegant/cool/dark/earth/vivid/pastel/mono/retro）
+        - **rendering**: flat-vector / hand-drawn / painterly / digital / pixel / chalk
+        - **text**: 是否含文字及密度
+        - **mood**: 整体情绪基调
+      - 基于 5 维参数和文章核心观点，构建图片生成 prompt
+      - 用 `gemini-image` skill 的 generate 模式生成封面图
+      - 保存图片到文章同目录，文件名与文章同名（`.png`）
+      - 在 Markdown 正文顶部（标题下方）插入 `![[<图片文件名>]]` 引用
+      - 在 frontmatter 中添加 `cover: "<图片文件名>"`
 4. **飞书同步确认** — 询问用户「是否同步到飞书知识库？」
    - 若用户确认：
      a. 根据 `category` 的一级分类确定目标飞书节点（查 `feishu` skill 的标签→节点映射表）
