@@ -102,6 +102,24 @@ Generate a daily Twitter digest of hot content.
 ucal_platform_search(platform="x", query="AI OR Claude OR GPT OR LLM", limit=10)
 ```
 
+### Step 3.5: Dedup Against Previous Digests
+
+**必须在排序前执行**，避免重复报道已有内容：
+
+1. **读取最近 1-3 天日报**：
+   ```
+   Glob ~/Documents/obsidian/mixiaomi/日报/X日报-*.md → 按日期倒序取最近 1-3 篇
+   Read 每篇的 frontmatter + 正文标题
+   ```
+2. **提取已报道事件**：从前日日报中提取所有新闻条目（标题、关键词、涉及账号）
+3. **去重分类**：
+   - **已报道且无新进展** → 直接移除（如 GPT-5.4 发布、Promptfoo 收购）
+   - **已报道但有显著新数据** → 降级到「持续发酵」区，标注热度变化（如 likes 从 7K→16K）
+   - **全新事件** → 正常参与排序
+4. **补充引用**：在日报末尾 `数据来源` 中加 `去重参考: X日报-YYYY-MM-DD`
+
+**判断标准**：同一事件（同一公告/产品/人物动态），即使 likes 翻倍也算「已报道」，不应作为新的重大新闻重复出现。
+
 ### Step 4: Rank and Classify
 
 - Sort by engagement (likes + retweets + replies) descending
@@ -136,6 +154,9 @@ status: enriched
 
 ## Tool/Product Recommendations
 - **[Product]** by @author - [One-line description]
+
+## 持续发酵（前日已报，热度上升）
+- **[事件]** (当前 likes，前日报道时 likes) — 新动态简述
 ```
 
 ### Step 6: Save & Publish

@@ -662,6 +662,124 @@ Wiki APIs return error 99991663 if:
 2. **Bot not in wiki space** -> Fix: In Feishu wiki settings, add the bot as a member
 3. **App permissions not granted** -> Fix: Enable `wiki:wiki:readonly` etc. in Feishu Open Platform > App > Permissions
 
+## 文档图片上传（已验证流程）
+
+### 核心结论
+
+**文档图片操作（`replace_image`、创建带内容的图片 block）必须使用 `user_access_token`。** `tenant_access_token` 可以上传文件到云盘，但无法将图片绑定到文档 block。
+
+| 操作 | tenant_access_token | user_access_token |
+|------|:---:|:---:|
+| 上传图片 `upload_all` | ✅ | ✅ |
+| 创建空图片 block | ⚠️ block 创建但 token 为空（黑块） | ✅ |
+| `replace_image` 绑定图片 | ❌ 1770013 relation mismatch | ✅ |
+
+### 完整流程（3 步）
+
+**前置条件**: 已获取 `user_access_token`（见下方「获取 user_access_token」章节）
+
+```bash
+UAT="<user_access_token>"
+DOC="<document_obj_token>"
+
+# Step 1: 在文档指定位置创建空图片 block
+# index 是 Page block 的 child index（flat list index - 1）
+BLOCK_ID=$(curl -s -X POST "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks/$DOC/children" \
+  -H "Authorization: Bearer $UAT" \
+  -H "Content-Type: application/json" \
+  -d '{"children": [{"block_type": 27, "image": {}}], "index": <target_child_index>}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['children'][0]['block_id'])")
+
+# Step 2: 上传图片，parent_node 必须是图片 block_id（不是 doc_id！）
+FILE_TOKEN=$(curl -s -X POST 'https://open.feishu.cn/open-apis/drive/v1/medias/upload_all' \
+  -H "Authorization: Bearer $UAT" \
+  -F "file_name=image.png" \
+  -F "parent_type=docx_image" \
+  -F "parent_node=$BLOCK_ID" \
+  -F "size=$(wc -c < image.png | tr -d ' ')" \
+  -F "file=@image.png" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['file_token'])")
+
+# Step 3: replace_image 绑定图片到 block
+curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks/$BLOCK_ID" \
+  -H "Authorization: Bearer $UAT" \
+  -H "Content-Type: application/json" \
+  -d "{\"replace_image\":{\"token\":\"$FILE_TOKEN\"}}"
+```
+
+### 关键注意事项
+
+- **`parent_node` 必须是图片 block_id**，不是文档 ID。这确保上传的素材与目标 block 的关联关系正确
+- **child index vs flat index**: `batch_delete` 和 `children/create` 的 index 是 Page block 的 child index = flat list index - 1（不含 Page block 自身）
+- **批量操作时从后往前删除**，避免 index 偏移
+- 图片大小限制 20MB，超过需用分片上传（`upload_prepare` → `upload_part` → `upload_finish`）
+
+### 获取 user_access_token
+
+`user_access_token` 通过 OAuth 授权码流程获取，有效期 2 小时，可用 refresh_token 刷新（30 天有效）。
+
+#### 前置配置
+
+1. 在 [飞书开放平台 > 应用 > 安全设置](https://open.feishu.cn/app/cli_a928d4672cb89bca/safe) 添加重定向 URL: `http://localhost:9876/callback`
+2. 确保应用已申请 `docx:document:write_only`、`docs:document.media:upload` 等云文档权限
+
+#### 方法 1: 自动 OAuth 服务器（推荐）
+
+```bash
+# 启动 OAuth 回调服务器（自动交换 code 并保存 token）
+python3 ~/.claude/skills/feishu/scripts/oauth_server.py &
+
+# 生成授权链接，用户在浏览器中打开并授权
+APP_ID="cli_a928d4672cb89bca"
+REDIRECT="http%3A%2F%2Flocalhost%3A9876%2Fcallback"
+echo "https://open.feishu.cn/open-apis/authen/v1/authorize?app_id=${APP_ID}&redirect_uri=${REDIRECT}&response_type=code&state=auth"
+
+# 授权成功后 token 自动保存到 /tmp/feishu_uat.json
+```
+
+#### 方法 2: 手动流程
+
+```bash
+# 1. 用户访问授权链接，授权后从回调 URL 获取 code 参数
+
+# 2. 获取 app_access_token
+APP_TOKEN=$(curl -s -X POST 'https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal' \
+  -H 'Content-Type: application/json' \
+  -d '{"app_id":"<APP_ID>","app_secret":"<APP_SECRET>"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['app_access_token'])")
+
+# 3. 用 code 换取 user_access_token
+curl -s -X POST 'https://open.feishu.cn/open-apis/authen/v1/oidc/access_token' \
+  -H "Authorization: Bearer $APP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"grant_type":"authorization_code","code":"<CODE>"}'
+# 返回: access_token, refresh_token, expires_in(7200s), refresh_expires_in(2592000s)
+```
+
+#### 刷新 token
+
+```bash
+# user_access_token 2小时过期，用 refresh_token 刷新（30天有效）
+curl -s -X POST 'https://open.feishu.cn/open-apis/authen/v1/oidc/refresh_access_token' \
+  -H "Authorization: Bearer $APP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"grant_type":"refresh_token","refresh_token":"<REFRESH_TOKEN>"}'
+```
+
+#### Token 存储
+
+token 保存在 `/tmp/feishu_uat.json`，格式：
+```json
+{
+  "access_token": "u-xxx",
+  "refresh_token": "ur-xxx",
+  "expires_in": 7200,
+  "refresh_expires_in": 2592000
+}
+```
+
+使用时先检查文件是否存在、token 是否过期，过期则用 refresh_token 刷新或重新 OAuth。
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -670,6 +788,10 @@ Wiki APIs return error 99991663 if:
 | `User access token is not configured` | API requires UAT, no login session | Run `login` command or use alternative API |
 | `No active login sessions` | UAT expired | Re-run `npx -y @larksuiteoapi/lark-mcp login -a <id> -s <secret>` |
 | `131005 not found` | Wrong token type passed | Use correct token: node_token for getNode, obj_token for rawContent |
+| `1770013 relation mismatch` | `replace_image` 使用了 tenant_access_token | 必须用 user_access_token，见「文档图片上传」章节 |
+| `1770001 invalid param` | 图片 block 创建时用了 `token` 字段 | 创建空 block（`image: {}`），再用 `replace_image` 绑定 |
+| 图片显示黑块/加载中 | tenant token 创建的图片 block token 为空 | 用 user_access_token 重新走完整流程 |
+| `20029 redirect_uri 不合法` | OAuth 重定向 URL 未在应用安全设置中配置 | 去飞书开放平台 > 应用 > 安全设置添加 `http://localhost:9876/callback` |
 | Tool not found in ToolSearch | MCP tool not loaded | Use `ToolSearch` with `+lark <keyword>` to load |
 | Permission denied | App lacks required scope | Add permissions in Feishu Open Platform > App > Permissions |
 

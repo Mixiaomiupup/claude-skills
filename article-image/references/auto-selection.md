@@ -13,6 +13,22 @@ When dimensions are omitted, select based on content signals.
 | Framework, model, architecture, principles | `framework` |
 | History, timeline, progress, evolution | `timeline` |
 
+## Mermaid vs AI Generation (for `illustrate` mode)
+
+Before selecting style, determine rendering method:
+
+| Content Feature | Method | Reason |
+|----------------|--------|--------|
+| Flow/steps/lifecycle | Mermaid flowchart | Text precision, clear arrows |
+| Architecture/components | Mermaid flowchart + subgraph | Accurate hierarchy and connections |
+| Sequence/interaction | Mermaid sequence | Call order must be exact |
+| State transitions | Mermaid stateDiagram | State names and conditions are key |
+| Concept/visual metaphor | AI generation | Creative expression, text not critical |
+| Data comparison/infographic | AI generation | Visual layout matters more than text |
+| Atmosphere/decoration | AI generation | Pure aesthetics |
+
+**Rule of thumb**: Text is core information -> Mermaid. Text is decoration -> AI generation.
+
 ## Illustration Style (for `illustrate` mode)
 
 | Content Signals | Style |
@@ -25,17 +41,24 @@ When dimensions are omitted, select based on content signals.
 | Travel, lifestyle, creative, dreamy | `watercolor` |
 | Tech explainer, journalism, magazine | `editorial` |
 | Biology, chemistry, academic, research | `scientific` |
+| Tutorial, notes, onboarding, friendly | `sketch-notes` |
+| Teaching, classroom, explanation | `chalkboard` |
+| Gaming, retro tech, fun, nostalgic | `pixel-art` |
+| 80s/90s, nostalgia, bold energy | `retro` |
+| Lightweight, casual, cheerful | `flat-doodle` |
+| Animation, magical, storybook | `fantasy-animation` |
+| History, heritage, exploration | `vintage` |
 
-## Type × Style Compatibility
+## Type x Style Compatibility
 
-| | notion | warm | minimal | blueprint | watercolor | elegant | editorial | scientific |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| infographic | ++ | + | ++ | ++ | + | ++ | ++ | ++ |
-| scene | + | ++ | + | - | ++ | + | + | - |
-| flowchart | ++ | + | + | ++ | - | + | ++ | + |
-| comparison | ++ | + | ++ | + | + | ++ | ++ | + |
-| framework | ++ | + | ++ | ++ | - | ++ | + | ++ |
-| timeline | ++ | + | + | + | ++ | ++ | ++ | + |
+| | notion | warm | minimal | blueprint | watercolor | elegant | editorial | scientific | sketch-notes | chalkboard | pixel-art | retro | flat-doodle | fantasy-animation | vintage |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| infographic | ++ | + | ++ | ++ | + | ++ | ++ | ++ | ++ | + | + | + | + | - | + |
+| scene | + | ++ | + | - | ++ | + | + | - | + | - | + | + | + | ++ | ++ |
+| flowchart | ++ | + | + | ++ | - | + | ++ | + | ++ | ++ | - | + | + | - | - |
+| comparison | ++ | + | ++ | + | + | ++ | ++ | + | + | + | + | + | ++ | - | + |
+| framework | ++ | + | ++ | ++ | - | ++ | + | ++ | + | + | - | + | - | - | + |
+| timeline | ++ | + | + | + | ++ | ++ | ++ | + | + | + | + | ++ | + | + | ++ |
 
 `++` = recommended | `+` = works | `-` = avoid
 
