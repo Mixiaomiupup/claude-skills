@@ -144,7 +144,8 @@ sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 | ------ | ------------------ |
 | OS     | Ubuntu 24.04       |
 | CPU    | Intel i7-12700     |
-| Memory | 32 GiB (16+16)    |
+| Memory | 16 GiB            |
+| GPU    | GTX 1060 5GB       |
 | Role   | 计算密集型任务      |
 
 ## Git & GitHub

@@ -50,8 +50,20 @@ description: "跨平台内容分析和话题调研。给链接时自动分析内
 
 1. 从 URL 识别平台
 2. `ucal_platform_read(platform, url)` 获取内容
-3. 按下方平台策略分析
-4. 输出结构化分析
+3. **检查截断**：如果返回内容末尾有 `... (truncated)` 或明显缺少文章后半部分（对照目录检查），说明页面使用了懒加载，`platform_read` 未触发底部内容渲染。降级到 `ucal_browser_action`：
+   ```
+   ucal_browser_action(url, actions=[
+     {"type": "scroll", "direction": "down", "amount": 15000},
+     {"type": "wait", "selector": "body", "timeout": 3000},
+     {"type": "extract_text", "selector": "body"}
+   ])
+   ```
+   - 滚动量根据文章长度调整（短文 5000，长文 15000+）
+   - 超长页面可分段滚动：先滚 10000 提取，再滚 10000 提取，合并
+4. 按下方平台策略分析
+5. 输出结构化分析
+
+**已知懒加载页面**：飞书公开文章（`feishu.cn/content/article/*`）
 
 ### XHS 策略：以评论为核心
 
@@ -339,4 +351,5 @@ Phase 2（可选，高门槛触发）：追搜 ≤2 篇 → 直接综合
 | 浏览器平台（xhs/zhihu）会话过期 | 提示用户扫码登录 → `ucal_platform_login(platform)` → 重试 |
 | 搜索结果为空 | 建议用户换关键词 |
 | 单篇读取失败 | 跳过该篇，在输出中标注 "[不可访问]" |
+| `platform_read` 内容截断（懒加载） | 降级到 `browser_action`：先 scroll down 再 extract_text（见 Read 模式流程第 3 步） |
 | Research 成功读取 < 2 篇 | 降级为单篇摘要模式 |

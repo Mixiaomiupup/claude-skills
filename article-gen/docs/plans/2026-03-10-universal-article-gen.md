@@ -1,3 +1,87 @@
+# Universal Article Gen Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Upgrade article-gen from news-only to a universal 6-type article generation engine, with shared category index.
+
+**Architecture:** article-gen SKILL.md is rewritten to support 6 article types (news/architecture/review/tutorial/notes/essay) with type inference, per-type frontmatter extensions, recommended body templates, and a shared category index file. kb SKILL.md is updated to read categories from the same index file instead of hardcoding.
+
+**Tech Stack:** Markdown skill files, Obsidian vault
+
+---
+
+### Task 1: Create category index file
+
+**Files:**
+- Create: `~/Documents/obsidian/mixiaomi/meta/categories.md`
+
+**Step 1: Create meta directory**
+
+Run: `mkdir -p ~/Documents/obsidian/mixiaomi/meta`
+
+**Step 2: Create categories.md**
+
+```markdown
+---
+title: "Category Index"
+description: "Shared category registry for article-gen and kb skills"
+updated: 2026-03-10
+---
+
+# Category Index
+
+Article-gen and kb skills read from this file. Semi-auto expandable: Claude proposes new categories, user confirms, then append here.
+
+Format: `category` - description
+
+## AI
+- `AI/发展` - 模型发布、能力进展、AGI
+- `AI/应用` - 工具、工作流、Agent
+- `AI/影响` - 就业、社会、伦理
+
+## 技术
+- `技术/趋势` - MCP、CLI-first、平台趋势
+- `技术/开发` - 编程技巧、架构、Vibe Coding
+- `技术/架构` - 系统设计、架构分析、模块设计
+
+## 商业
+- `商业/创业` - 创业、融资、商业
+- `商业/产品` - 产品思维、UX
+
+## 思考
+- `思考/创意` - 灵感、创新方法
+- `思考/社会` - 监管、哲学、未来
+- `思考/成长` - 个人成长、学习方法、心态
+```
+
+**Step 3: Verify file**
+
+Run: `cat ~/Documents/obsidian/mixiaomi/meta/categories.md`
+Expected: File contents as above
+
+**Step 4: Commit**
+
+```bash
+cd ~/Documents/obsidian/mixiaomi && git add meta/categories.md && git commit -m "feat: add shared category index for article-gen and kb skills"
+```
+
+---
+
+### Task 2: Rewrite article-gen SKILL.md
+
+**Files:**
+- Modify: `~/.claude/skills/article-gen/SKILL.md` (full rewrite)
+
+**Step 1: Read current SKILL.md**
+
+Run: Read `~/.claude/skills/article-gen/SKILL.md`
+Purpose: Confirm current content before overwrite
+
+**Step 2: Write new SKILL.md**
+
+Replace entire file with the following content:
+
+````markdown
 ---
 name: article-gen
 description: "Universal article generation engine. Supports 6 article types: news, architecture, review, tutorial, notes, essay. Orchestrates convert -> enrich -> translate -> cover image -> publish. Use when user shares a link to save, says '保存', '写个测评', '架构分析', '记个教程', '读书笔记', '分享到飞书', or any article generation flow."
@@ -35,10 +119,10 @@ description: "Universal article generation engine. Supports 6 article types: new
 | Skill | 职责 | 何时调用 |
 |-------|------|---------|
 | `x2md` | X/Twitter → Markdown 转换 | `news` 类型且输入是 X 链接时 |
-| `article-image` | 封面配图（5D 风格 + 生图） | enrichment 后（所有类型） |
+| `cover-image` | 封面配图（5D 风格 + 生图） | enrichment 后（所有类型） |
 | `feishu` | 飞书知识库发布 + 全员广播 | 用户确认发布时（所有类型） |
 
-`x2md` 和 `article-image` 是独立 skill，不知道彼此的存在。`article-gen` 负责串联它们。
+`x2md` 和 `cover-image` 是独立 skill，不知道彼此的存在。`article-gen` 负责串联它们。
 
 ## 分类体系 (`category`)
 
@@ -105,7 +189,7 @@ g. 追加 `## 我的笔记` 空节（供后续笔记用）
 
 ### Step 3: 翻译
 
-如果 `lang` 不是 `zh`（非中文内容），**重组**正文结构（不是在末尾追加翻译）：
+如果 `lang` 不是 `zh`（非中文内容），重组正文结构：
 
 ```markdown
 ## 翻译
@@ -115,25 +199,22 @@ g. 追加 `## 我的笔记` 空节（供后续笔记用）
 （英文原文）
 ```
 
-**执行要点**：这是「重组」操作——将原文移到 `## 原文` 下，翻译放在 `## 翻译` 下，翻译在前。用 Write 工具整体重写文件，不要用 Edit 在末尾追加。
-
 翻译标准：信达雅，专有名词不翻译，技术术语保留英文并括号注中文。
 
 **注意**：`tutorial` 和 `architecture` 中的代码块不翻译。
 
 ### Step 4: 配图
 
-调用 `article-image` skill（cover 模式，quick）：
+调用 `cover-image` skill（quick 模式）：
 
 ```
-article-image skill:
-- 模式: cover
+cover-image skill:
 - 文章路径: <.md 绝对路径>
 - category: <从 frontmatter 读取>
-- 调用模式: quick
+- 模式: quick
 ```
 
-`article-image` 会自动完成风格选择 → 生图 → 嵌入文章。
+`cover-image` 会自动完成风格选择 → 生图 → 嵌入文章。
 
 ### Step 5: 飞书发布
 
@@ -392,7 +473,7 @@ license: MIT
 ```
 article-gen (本 skill，总编排)
   ├── x2md ——— X → Markdown（仅 news 类型调用）
-  ├── article-image ——— 封面配图（所有类型）
+  ├── cover-image ——— 封面配图（所有类型）
   ├── feishu ——— 飞书发布（所有类型）
   └── Claude ——— enrichment + 翻译（内置能力，非 skill）
 
@@ -404,14 +485,89 @@ kb sync 模式调用 feishu skill 做双向同步。
 ```
 
 每个 skill 只做一件事，article-gen 负责串联。
+````
 
-## 执行检查清单
+**Step 3: Verify new SKILL.md**
 
-每篇文章完成后，逐项自检：
+Run: `head -5 ~/.claude/skills/article-gen/SKILL.md`
+Expected: New frontmatter with updated description mentioning 6 types
 
-- [ ] **Step 2**: frontmatter 的 `status` 已从 `raw` → `enriched`
-- [ ] **Step 2**: `category`、`tags`、`summary` 已填充
-- [ ] **Step 2**: 末尾有 `## 我的笔记` 空节
-- [ ] **Step 3**: 非中文文章的正文结构是 `## 翻译` → `## 原文`（翻译在前）
-- [ ] **Step 3**: 不是在末尾追加翻译，而是整体重组了文件
-- [ ] **Step 5**: 飞书发布后已回写 `feishu_node_token` 和 `feishu_sync_time`
+---
+
+### Task 3: Update kb SKILL.md to use shared category index
+
+**Files:**
+- Modify: `~/.claude/skills/kb/SKILL.md` (Section 1.3 only)
+
+**Step 1: Read current kb SKILL.md**
+
+Run: Read `~/.claude/skills/kb/SKILL.md`
+Purpose: Find the hardcoded category list in Section 1.3
+
+**Step 2: Replace hardcoded category list**
+
+In `~/.claude/skills/kb/SKILL.md`, find Section `### 1.3 Tag 分类体系` and replace the hardcoded 9-category list with a reference to the shared index file.
+
+Replace this block (approximately lines 68-85):
+```markdown
+### 1.3 Tag 分类体系
+
+从以下 9 个层级标签中选择 1-3 个最匹配的：
+
+```
+AI/发展        — 模型发布、能力进展、AGI
+AI/应用        — 工具、工作流、Agent
+AI/影响        — 就业、社会、伦理
+技术/趋势      — MCP、CLI-first、平台趋势
+技术/开发      — 编程技巧、架构、Vibe Coding
+商业/创业      — 创业、融资、商业
+商业/产品      — 产品思维、UX
+思考/创意      — 灵感、创新方法
+思考/社会      — 监管、哲学、未来
+```
+```
+
+With:
+```markdown
+### 1.3 Tag 分类体系
+
+**从共享索引文件读取 category 列表**：`~/Documents/obsidian/mixiaomi/meta/categories.md`
+
+从该文件中选择 1-3 个最匹配的标签作为 tags，选 1 个作为 category。
+
+**半自动扩展**：如果内容不属于任何已知 category，提议一个新 category（遵循 `一级/二级` 格式），用户确认后追加到索引文件。
+```
+
+**Step 3: Verify changes**
+
+Run: `grep -A 5 "1.3 Tag" ~/.claude/skills/kb/SKILL.md`
+Expected: Shows reference to shared index file, not hardcoded list
+
+---
+
+### Task 4: Verify end-to-end consistency
+
+**Step 1: Verify category index file exists and is valid**
+
+Run: `cat ~/Documents/obsidian/mixiaomi/meta/categories.md`
+Expected: 11 categories (9 original + 2 new) with descriptions
+
+**Step 2: Verify article-gen SKILL.md references index file**
+
+Run: `grep "categories.md" ~/.claude/skills/article-gen/SKILL.md`
+Expected: At least 2 references to `~/Documents/obsidian/mixiaomi/meta/categories.md`
+
+**Step 3: Verify kb SKILL.md references index file**
+
+Run: `grep "categories.md" ~/.claude/skills/kb/SKILL.md`
+Expected: At least 1 reference to `~/Documents/obsidian/mixiaomi/meta/categories.md`
+
+**Step 4: Verify article-gen has all 6 types**
+
+Run: `grep -c "news\|architecture\|review\|tutorial\|notes\|essay" ~/.claude/skills/article-gen/SKILL.md`
+Expected: Multiple matches (>20), confirming all types are documented
+
+**Step 5: Verify no hardcoded category lists remain in kb**
+
+Run: `grep "9 个层级标签" ~/.claude/skills/kb/SKILL.md`
+Expected: No matches (old hardcoded reference removed)
