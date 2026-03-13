@@ -78,6 +78,7 @@ feishu_sync_time: ""           # 最后同步时间（同步后填充）
 1. 判断内容类型 → 选目录
 2. 生成 frontmatter（title, type, date, tags, category, status: raw, feishu_node_token: "", feishu_sync_time: ""）
 3. 写正文内容（用户提供的内容，整理为结构化 Markdown）
+   - **流程图/架构图用 Mermaid**（` ```mermaid `），不要用 ASCII art。飞书渲染 Mermaid，不渲染 ASCII 图
 4. 末尾追加空的 `## 我的笔记` 区域
 5. 文件名：用中文，简洁概括内容主题（如 `AI读书助手.md`）
 6. **飞书同步**（可选）— 写入本地后，询问用户「是否同步到飞书知识库？」
