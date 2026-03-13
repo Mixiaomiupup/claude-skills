@@ -75,7 +75,7 @@ description: "Universal article generation engine. Supports 6 article types: new
 | type | 输入 | 转换方式 |
 |------|------|---------|
 | `news` | X 链接 | 调用 `x2md` skill → `.md`（`status: raw`） |
-| `news` | 其他 URL | 调用 `ucal` 抓取 + 存 Markdown |
+| `news` | 其他 URL | `tavily_extract`（`include_images: true`）+ 存 Markdown |
 | `architecture` | 项目路径或笔记 | 用户已完成研究，直接提供素材 |
 | `review` | 产品 URL 或试用笔记 | 用户已完成研究，直接提供素材 |
 | `tutorial` | 代码片段 / 问题描述 | 用户直接提供 |
@@ -84,6 +84,24 @@ description: "Universal article generation engine. Supports 6 article types: new
 | 所有 | 本地已有 .md | 跳过转换，直接进入 enrichment |
 
 **研究与写作分离**：非 `news` 类型的前置研究（代码探索、产品试用、资料搜集）在 article-gen 之外完成。article-gen 从"有素材"开始。
+
+**非 X 链接抓取注意事项**：
+
+抓取非 X/Twitter 的 URL 时，**必须使用 `tavily_extract` 并开启 `include_images: true`**，否则文章中的架构图、流程图等内联图片会丢失。
+
+```python
+# 正确做法
+tavily_extract(urls=["https://..."], include_images=True, format="markdown")
+
+# 错误做法（图片会丢失）
+tavily_extract(urls=["https://..."])  # include_images 默认 false
+ucal_platform_read(platform="generic", url="https://...")  # 不返回图片 URL
+```
+
+抓取结果中的图片以 `![alt](url)` 格式出现在 raw content 中。保存文章时：
+1. 保留所有 `![...](...)` 图片引用，插入到正文对应位置
+2. 如果是翻译文章（Step 3），翻译和原文两个部分都要插入图片
+3. 图片 alt text 在翻译部分用中文描述，原文部分保留英文原始 alt
 
 ### Step 2: Enrichment
 
@@ -145,8 +163,9 @@ article-image skill:
   c. 预处理 Markdown（去 frontmatter、`![[]]`、`[[wikilink]]`、`[toc]`）
   d. curl 文件上传 + 导入任务发布文档（参考 `feishu` skill 的「curl 文件上传导入」方法）
   e. curl 移入 wiki 对应节点
-  f. 回写本地 frontmatter：`feishu_node_token`、`feishu_sync_time`
-  g. 报告同步成功
+  f. **如文章含外部图片**：执行图片上传流程（见下方「飞书图片上传」）
+  g. 回写本地 frontmatter：`feishu_node_token`、`feishu_sync_time`
+  h. 报告同步成功
 
 - **用户拒绝**：跳过，仅保存本地
 
@@ -166,6 +185,54 @@ article-image skill:
 - tags
 - 封面图路径（如生成）
 - 飞书节点信息（如发布）
+
+## 飞书图片上传（Step 5f 详细流程）
+
+飞书 Markdown 导入**不会自动获取外部图片 URL**，导入后显示"无法导入该图片"。文章含 `![](https://...)` 内联图片时，必须在文档导入后手动上传图片。
+
+### 前置条件
+
+- `user_access_token`（UAT）：图片操作必须用 UAT，tenant token 不行。缓存在 `/tmp/feishu_uat.json`，过期自动 refresh
+- `doc_token`：Step 5d 导入后获得的文档 token
+- 已安装 `librsvg`：`brew install librsvg`（SVG 转 PNG 用）
+
+### 完整流程
+
+```python
+# 1. 下载外部图片
+curl -s -o /tmp/img.svg "https://images.ctfassets.net/..."
+
+# 2. SVG 转 PNG（飞书不支持 SVG）
+#    ✅ rsvg-convert -w 1460 input.svg -o output.png  （保持宽高比）
+#    ❌ qlmanage -t -s 1460  （生成正方形缩略图，图片会拉伸）
+rsvg-convert -w 1460 /tmp/img.svg -o /tmp/img.png
+
+# 3. 列出文档所有 blocks，找到 image block（block_type=27）
+GET /docx/v1/documents/{doc}/blocks?page_size=500
+# → 记录每个 image block 的 block_id
+
+# 4. 对每个 image block 执行上传+绑定（需 UAT）
+# 4a. 上传图片（parent_type=docx_image, parent_node=block_id）
+POST /drive/v1/medias/upload_all
+  -F file_name=img.png
+  -F parent_type=docx_image
+  -F parent_node={block_id}    # 必须是 block_id，不是 doc_id
+  -F size={file_size}
+  -F file=@/tmp/img.png
+# → 获得 file_token
+
+# 4b. replace_image 绑定图片到 block
+PATCH /docx/v1/documents/{doc}/blocks/{block_id}
+  {"replace_image": {"token": "{file_token}"}}
+```
+
+### 关键注意事项
+
+- **翻译文章有双倍图片**：翻译和原文两部分各有一组图片 block，需要全部替换
+- **`parent_node` 必须是 block_id**，不是 doc_id，否则 `replace_image` 报 `1770013 relation mismatch`
+- **PNG 格式优先**：飞书支持 PNG/JPG，不支持 SVG/WebP
+- **UAT 获取**：运行 `python3 ~/.claude/skills/feishu/scripts/oauth_server.py` 启动 OAuth，或检查 `/tmp/feishu_uat.json` 缓存是否有效
+- 详细的 UAT 获取和 block API 参考见 `feishu` skill 的「文档图片上传」章节
 
 ## 推荐正文模板
 
@@ -412,6 +479,8 @@ kb sync 模式调用 feishu skill 做双向同步。
 - [ ] **Step 2**: frontmatter 的 `status` 已从 `raw` → `enriched`
 - [ ] **Step 2**: `category`、`tags`、`summary` 已填充
 - [ ] **Step 2**: 末尾有 `## 我的笔记` 空节
+- [ ] **Step 1**: 非 X 链接抓取时使用了 `include_images: true`，图片已插入正文对应位置
 - [ ] **Step 3**: 非中文文章的正文结构是 `## 翻译` → `## 原文`（翻译在前）
 - [ ] **Step 3**: 不是在末尾追加翻译，而是整体重组了文件
+- [ ] **Step 3**: 翻译和原文两部分都包含了原文中的内联图片
 - [ ] **Step 5**: 飞书发布后已回写 `feishu_node_token` 和 `feishu_sync_time`

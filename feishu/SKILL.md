@@ -337,6 +337,35 @@ card = {
 |------|---------|------|
 | 具身资讯分享 | `oc_ca0e539c7a997487125adcac0f52a3c4` | Bot 已加入（备用，推送优先用广播） |
 
+### 已知部门
+
+| 部门 | department_id | 说明 |
+|------|--------------|------|
+| 后场-研发 | `od-44778258d5c056a8bc746c1c9b92032e` | 正式研发团队 |
+| 后场-研发（实习生+顾问） | `od-4d23fdda045eb2310bc154aa672ca2e0` | 实习生和顾问，与后场-研发有人员重叠 |
+| 前场-业务 | `od-d298abfccd172a73eda5f7194bd1812f` | |
+| 具身语料服务 | `od-32952337c6dd7b4fed51d8220aeb0080` | |
+| 职能支撑 | `od-d45883aa0889ddf7c7af6c9c3d3a7bc3` | |
+
+### 按部门定向推送
+
+与全量广播不同，按部门推送只获取指定部门成员并去重发送。MCP 没有"列出部门成员"工具，必须用 curl：
+
+```bash
+# 获取所有部门 ID
+curl -s "https://open.feishu.cn/open-apis/contact/v3/scopes" -H "Authorization: Bearer $TOKEN"
+
+# 获取部门名称
+curl -s "https://open.feishu.cn/open-apis/contact/v3/departments/$DEPT_ID?department_id_type=open_department_id" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 获取部门成员（返回 open_id + name）
+curl -s "https://open.feishu.cn/open-apis/contact/v3/users/find_by_department?department_id=$DEPT_ID&user_id_type=open_id&department_id_type=open_department_id&page_size=50" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**多部门去重**: 发送多个部门时，用 set 记录已发送的 open_id，跨部门自动跳过重复人员。例如"后场-研发"和"后场-研发（实习生+顾问）"有 3 人重叠（谢娟、邓子晗、徐丁宁），去重后共 13 人。
+
 ## Wiki 浏览工作流
 
 现在全部通过 MCP 工具完成，无需 curl：
@@ -461,6 +490,7 @@ mcp__lark-mcp__wiki_v2_spaceNode_moveDocsToWiki
 - 去掉 `![[image.png]]` 行（飞书无法显示本地图片）
 - `[[wikilink]]` → 纯文本（飞书不支持 wikilink）
 - 去掉 `[toc]`（飞书有原生目录功能）
+- 流程图/架构图用 Mermaid（飞书原生渲染），不要用 ASCII art
 
 **步骤**：
 
@@ -713,6 +743,7 @@ curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks
 - **child index vs flat index**: `batch_delete` 和 `children/create` 的 index 是 Page block 的 child index = flat list index - 1（不含 Page block 自身）
 - **批量操作时从后往前删除**，避免 index 偏移
 - 图片大小限制 20MB，超过需用分片上传（`upload_prepare` → `upload_part` → `upload_finish`）
+- **SVG 必须先转 PNG**：飞书不支持 SVG 格式图片。使用 `rsvg-convert -w 1460 input.svg -o output.png`（`brew install librsvg`）。**不要用 `qlmanage -t -s`**，它生成正方形缩略图会拉伸图片
 
 ### 获取 user_access_token
 
@@ -807,3 +838,109 @@ npx -y @larksuiteoapi/lark-mcp login -a <app_id> -s <app_secret>
 # Logout
 npx -y @larksuiteoapi/lark-mcp logout
 ```
+
+## Mermaid 图表发布到飞书
+
+**飞书不渲染 Markdown 导入的 Mermaid 代码块**，只会显示为普通代码块。必须先转图片再上传。
+
+### 流程概览
+
+```
+本地 Markdown (含 ```mermaid)
+    ↓ mmdc 渲染
+PNG 图片 (/tmp/mermaid_N.png)
+    ↓ 导入文档后
+定位飞书文档中的代码块 (block_type=14)
+    ↓ 逐个替换
+删除代码块 → 创建空图片块 → 上传图片 → replace_image 绑定
+```
+
+### 前置条件
+
+- `mmdc` (mermaid CLI): `brew install mermaid-cli` 或 `npm i -g @mermaid-js/mermaid-cli`
+- `user_access_token`: 文档图片操作必须用 UAT（见上方「获取 user_access_token」章节）
+
+### Step 1: 提取并渲染 Mermaid
+
+```python
+import re
+
+with open("article.md") as f:
+    content = f.read()
+
+# 提取所有 mermaid 代码块
+for i, m in enumerate(re.finditer(r'```mermaid\n(.*?)```', content, re.DOTALL)):
+    with open(f'/tmp/mermaid_{i}.mmd', 'w') as f:
+        f.write(m.group(1).strip())
+```
+
+```bash
+# 渲染为 PNG（白底，2x 缩放，宽度 1460px 适配飞书）
+for f in /tmp/mermaid_*.mmd; do
+  mmdc -i "$f" -o "${f%.mmd}.png" -w 1460 -b white --scale 2
+done
+```
+
+### Step 2: 定位飞书文档中的 Mermaid 代码块
+
+导入文档后，Mermaid 变成 block_type=14（Code Block）。需要遍历所有 blocks 找到它们：
+
+```python
+# 获取所有 blocks（注意分页，每页最多 500）
+all_items = []
+page_token = None
+while True:
+    url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{DOC_ID}/blocks?page_size=500'
+    if page_token:
+        url += f'&page_token={page_token}'
+    resp = curl_json('GET', url)
+    all_items.extend(resp['data']['items'])
+    if not resp['data'].get('has_more'):
+        break
+    page_token = resp['data']['page_token']
+
+# 找到 mermaid 代码块
+mermaid_blocks = []
+for b in all_items:
+    if b['block_type'] == 14:
+        content = ''.join(e['text_run']['content'] for e in b.get('code', {}).get('elements', []) if 'text_run' in e)
+        if any(kw in content for kw in ['graph', 'sequenceDiagram', 'flowchart', 'classDiagram']):
+            mermaid_blocks.append(b)
+```
+
+### Step 3: 替换代码块为图片（从后往前）
+
+**必须从后往前处理**，否则删除操作会导致后续 block 的 child_index 偏移。
+
+```python
+# 计算 child_index（block 在文档根节点中的子节点序号）
+target_block_id = '<block_id>'
+child_index = sum(1 for b in all_items if b.get('parent_id') == DOC_ID and b['block_id'] != DOC_ID
+                  and all_items.index(b) < all_items.index(target_block))
+
+# 1. 删除代码块
+curl_json('DELETE',
+    f'.../documents/{DOC_ID}/blocks/{DOC_ID}/children/batch_delete',
+    data={'start_index': child_index, 'end_index': child_index + 1})
+
+# 2. 创建空图片块（在同一位置）
+resp = curl_json('POST',
+    f'.../documents/{DOC_ID}/blocks/{DOC_ID}/children',
+    data={'children': [{'block_type': 27, 'image': {}}], 'index': child_index})
+img_block_id = resp['data']['children'][0]['block_id']
+
+# 3. 上传图片（parent_node 必须是图片 block_id！）
+# curl -F "parent_type=docx_image" -F "parent_node={img_block_id}" -F "file=@{png_file}"
+
+# 4. 绑定图片到 block
+curl_json('PATCH',
+    f'.../documents/{DOC_ID}/blocks/{img_block_id}',
+    data={'replace_image': {'token': file_token}})
+```
+
+### 关键注意事项
+
+- **child_index ≠ flat index**: flat index 包含嵌套 block，child_index 只计算文档根节点的直接子节点
+- **batch_delete 的 start/end 是 child_index**: 不是 flat list index
+- **从后往前处理**: 避免 index 偏移
+- **每步之间 sleep 0.5-1s**: 飞书 API 有短暂的一致性延迟
