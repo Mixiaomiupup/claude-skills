@@ -11,6 +11,80 @@ Orchestrate existing tools to manage Twitter information flow: discover accounts
 
 **Prerequisite**: Load ucal tools via `ToolSearch` query `+ucal` before any mode.
 
+---
+
+## 0. Video Download & Embed (cross-cutting capability)
+
+Download videos from X/Twitter tweets and embed them in Feishu documents.
+
+### 0.1 Download Video via yt-dlp
+
+```bash
+yt-dlp --cookies-from-browser chrome -f "bestvideo+bestaudio/best" \
+  -o "$HOME/Downloads/x-videos/%(uploader)s-%(id)s.%(ext)s" \
+  "https://x.com/{user}/status/{tweet_id}"
+```
+
+**Prerequisites**: `brew install yt-dlp ffmpeg`
+**Output**: Video file in `~/Downloads/x-videos/`
+
+### 0.2 Embed Video in Feishu Document (3-step method)
+
+File block (block_type 23) is the only API-supported way to embed playable video in Feishu docs.
+The `view_type` is controlled by the auto-generated View block (block_type 33), which defaults to card view.
+API does NOT support creating inline video players (preview view) — only the Feishu UI can do that.
+
+```python
+# Step 1: Create empty file block
+body = {"children": [{"block_type": 23, "file": {}}], "index": -1}
+resp = curl_json(['-X', 'POST',
+    f'https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}/blocks/{parent_block_id}/children',
+    '-H', f'Authorization: Bearer {token}',
+    '-H', 'Content-Type: application/json',
+    '-d', json.dumps(body),
+])
+file_block_id = resp['data']['children'][0]['block_id']
+
+# Step 2: Upload video with parent_node = file_block_id (CRITICAL!)
+resp = curl_json(['-X', 'POST',
+    'https://open.feishu.cn/open-apis/drive/v1/medias/upload_all',
+    '-H', f'Authorization: Bearer {token}',
+    '-F', f'file_name={video_filename}',
+    '-F', 'parent_type=docx_file',
+    '-F', f'parent_node={file_block_id}',  # Must be file_block_id, NOT doc_token
+    '-F', f'size={file_size}',
+    '-F', f'file=@{video_path}',
+])
+media_token = resp['data']['file_token']
+
+# Step 3: PATCH replace_file
+resp = curl_json(['-X', 'PATCH',
+    f'https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}/blocks/{file_block_id}',
+    '-H', f'Authorization: Bearer {token}',
+    '-H', 'Content-Type: application/json',
+    '-d', json.dumps({"replace_file": {"token": media_token}}),
+])
+```
+
+**Critical**: `parent_node` in Step 2 MUST be the `file_block_id` from Step 1, NOT the doc_token. Using doc_token causes `relation mismatch` (error 1770013).
+
+### 0.3 What doesn't work
+
+| Approach | Result | Reason |
+|----------|--------|--------|
+| Create file block with token in one call | `invalid param` | API only accepts empty `file: {}` at creation |
+| iframe block with x.com URL | `ERR_CONNECTION_CLOSED` | X.com blocked in China |
+| image block with video | Shows static thumbnail | Image block treats video as image |
+| PATCH view block to change view_type | `invalid param` | View block view_type not updatable via API |
+| Create view block directly | `block not support to create` | View blocks are auto-generated only |
+
+### 0.4 Integration with digest/article flow
+
+When a tweet contains a video:
+1. Download with yt-dlp during content collection
+2. After creating the Feishu document, insert video file block at the appropriate position
+3. The video shows as a file card with play button — users click to play
+
 ## Mode Router
 
 | User intent | Mode | Key action |
