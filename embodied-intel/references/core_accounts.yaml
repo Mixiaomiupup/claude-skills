@@ -1,0 +1,24 @@
+# Core accounts for embodied-intel skill
+# digest mode fetches these accounts' tweets via platform_read
+# Edit freely to add/remove accounts
+
+robotics_leaders:
+  - DrJimFan          # Jim Fan - NVIDIA, embodied AI research
+  - adcock_brett      # Brett Adcock - Figure AI CEO
+  - TheHumanoidHub    # Humanoid robot news aggregator
+  - CyberRobooo       # Robotics news/commentary
+
+companies:
+  - Figure            # Figure AI
+  - UnitreeRobotics   # Unitree Robotics
+  - BostonDynamics    # Boston Dynamics
+  - TeslaOptimus      # Tesla Optimus (if exists)
+
+research:
+  - chelseabfinn      # Chelsea Finn - Stanford robotics
+  - paborenstein      # Pieter Abbeel - UC Berkeley
+  - _serjohnson       # Sergey Levine - UC Berkeley
+
+china_market:
+  - aaborenstein      # Placeholder - add real Chinese robotics accounts
+  # Add: 智元机器人, 宇树科技 official accounts when found

@@ -28,13 +28,13 @@ Expand follow matrix by finding valuable accounts.
 
 ### Method A: Grok Recommendations (fast)
 
-1. `ucal_browser_action` with `url: "https://x.com/i/grok"` and actions:
+1. `ucal_browser_action` with `url: "https://x.com/i/grok?new=true"` and actions:
    - `wait` for `textarea[placeholder='Ask anything']` (timeout 15s)
    - `keyboard_type` (NOT `type`) on that selector with question text + `\n` to submit
-   - `eval_js` with `new Promise(r => setTimeout(() => r(document.body.innerText.substring(0, 4000)), 15000))` to wait for and extract Grok's response
+   - `eval_js` with **observer pattern** (see Grok 搜索模板) — polls until response text stabilizes, then extracts
 2. Ask domain-specific questions, e.g.:
-   - "AI programming leaders worth following on Twitter"
-   - "Best indie hacker Chinese Twitter accounts"
+   - "AI programming leaders worth following on Twitter. Include tweet URLs."
+   - "Best indie hacker Chinese Twitter accounts. Include tweet URLs."
    - User-specified domain queries
 3. Grok returns recommendations + referenced posts
 4. Optionally click "Posts" tab to extract recommended accounts from cited tweets
@@ -75,16 +75,42 @@ Generate a daily Twitter digest of hot content.
 
 ### Step 1: Grok Hot Topic Scan (primary source)
 
-1. `ucal_browser_action` with `url: "https://x.com/i/grok"` and actions:
+1. `ucal_browser_action` with `url: "https://x.com/i/grok?new=true"` and actions:
    - `wait` for `textarea[placeholder='Ask anything']` (timeout 15s)
    - `keyboard_type` on that selector with question + `\n`
-   - `eval_js` wait 15s then extract `document.body.innerText` (up to 4000 chars)
-2. Ask topic-focused questions:
-   - "What are this week's hot topics in AI programming?"
-   - "Latest developments with Claude/GPT?"
+   - `eval_js` wait **50s** then extract `document.body.innerText` (up to 8000 chars)
+2. Ask topic-focused questions (**always include "Include tweet URLs"**):
+   - "What are today's hot topics in AI and programming? Include tweet URLs."
+   - "Latest developments with Claude/GPT/LLM today? Include tweet URLs."
    - User-specified topics
-3. Grok returns summary + cited posts (e.g. "37 posts", "12 web pages")
+3. Grok returns summary + cited posts with real tweet URLs
 4. Optionally navigate to the conversation URL (`x.com/i/grok?conversation=<id>`) for follow-up extraction
+
+**Grok 搜索模板（观察者模式）**：
+
+用轮询代替固定等待 — 观察页面文本是否经历过增长并稳定下来，自动判断回复完成。
+典型 20-40 秒完成（比旧版固定 50s 更快更可靠）。
+
+```
+ucal_browser_action(
+  url: "https://x.com/i/grok?new=true",
+  actions: [
+    {type: "wait", selector: "textarea[placeholder='Ask anything']", timeout: 15000},
+    {type: "keyboard_type", selector: "textarea[placeholder='Ask anything']", text: "<问题>. Include tweet URLs.\n"},
+    {type: "eval_js", expression: "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"}
+  ]
+)
+```
+
+**观察者逻辑**：
+1. 先等 10 秒让 Grok 开始处理
+2. 每 3 秒检查文本长度变化
+3. 文本**经历过增长**（>50 字符）且**连续 3 次无变化**（9 秒稳定） → 判定完成
+4. 超过 120 秒兜底超时
+
+**关键参数**：
+- 每次调用 `?new=true` 开新对话，避免历史残留
+- **必须在每个问题中加 "Include tweet URLs"**，否则 Grok 不返回链接
 
 ### Step 2: Core Account Supplement
 
@@ -93,16 +119,27 @@ Generate a daily Twitter digest of hot content.
    ```
    ucal_platform_read(platform="x", url="https://x.com/{user}")
    ```
-   Grab recent 5 tweets per account
+   Grab recent 5 tweets per account — **each tweet now includes a `[View tweet](URL)` link**
 3. Supplements niche high-quality content Grok may miss
 
-### Step 3: Keyword Search (optional)
+### Step 3: Tavily Search (supplementary)
+
+```
+tavily_search(query="AI OR Claude OR GPT OR LLM", time_range="day", max_results=10)
+```
+
+**Tavily URL 可信度规则**：
+- **可信域名（直接使用）**：cnet.com, tomshardware.com, bloomberg.com, reuters.com, techcrunch.com, theverge.com, arstechnica.com, wired.com, venturebeat.com, semafor.com, cnbc.com, nytimes.com, wsj.com, x.com, github.com, arxiv.org, huggingface.co
+- **未知域名** → 标注 `[来源待验证]` 或不使用
+- **绝不编造或猜测 URL** — 如果没有真实 URL，宁可不放链接
+
+### Step 3.5: Keyword Search (optional)
 
 ```
 ucal_platform_search(platform="x", query="AI OR Claude OR GPT OR LLM", limit=10)
 ```
 
-### Step 3.5: Dedup Against Previous Digests
+### Step 4: Dedup Against Previous Digests
 
 **必须在排序前执行**，避免重复报道已有内容：
 
@@ -120,12 +157,14 @@ ucal_platform_search(platform="x", query="AI OR Claude OR GPT OR LLM", limit=10)
 
 **判断标准**：同一事件（同一公告/产品/人物动态），即使 likes 翻倍也算「已报道」，不应作为新的重大新闻重复出现。
 
-### Step 4: Rank and Classify
+### Step 5: Rank and Classify
 
 - Sort by engagement (likes + retweets + replies) descending
 - LLM classify each into: Breaking News / Deep Read / Hot Discussion / Tool Recommendation / Opinion Clash
 
-### Step 5: Generate Digest Markdown
+### Step 6: Generate Digest Markdown
+
+**核心原则：每条新闻/推文必须附真实原文链接。链接不真实不如不放。**
 
 ```markdown
 ---
@@ -140,117 +179,69 @@ status: enriched
 
 # X/Twitter Daily Digest - YYYY-MM-DD
 
-## Breaking News
-- **[Title/Summary]** by @author (likes count)
+## 重大新闻
+- **[Title/Summary]** by @author (N likes)
   > One-line summary
+  > [来源](https://x.com/author/status/xxx)
 
-## Hot Discussions
+## 热门讨论
 - **[Topic]** - Multi-person debate
   > Pro: ... | Con: ...
+  > [来源](URL)
 
-## Worth Reading
+## 值得关注
 - **[Title]** by @author - [Why worth reading]
-  > URL: https://x.com/...
+  > [来源](URL)
 
-## Tool/Product Recommendations
+## 工具/产品推荐
 - **[Product]** by @author - [One-line description]
+  > [来源](URL)
 
 ## 持续发酵（前日已报，热度上升）
-- **[事件]** (当前 likes，前日报道时 likes) — 新动态简述
+- **[事件]** (当前 N likes，前日报道时 M likes) — 新动态简述
+  > [来源](URL)
+
+## 趋势观察
+- [宏观趋势分析，跨多条信息的综合判断]
+
+## 溯源表
+
+| # | 标题 | 来源 | 互动数据 | 归属模块 |
+|---|------|------|---------|---------|
+| 1 | [title] | [来源](URL) | N likes / M retweets | 重大新闻 |
+| 2 | [title] | [来源](URL) | N likes / M retweets | 热门讨论 |
+| ... | | | | |
+
+---
+
+> 数据来源: Grok Search + Core Accounts (platform_read) + Tavily
+> 去重参考: X日报-YYYY-MM-DD
 ```
 
-### Step 6: Save & Publish
+### Step 7: Save & Publish
 
 1. Save to `~/Documents/obsidian/mixiaomi/日报/X日报-YYYY-MM-DD.md`
 2. Frontmatter: `type: digest`, tags from content analysis, `category` matching dominant topic
-3. Publish to Feishu wiki and broadcast (see Step 7)
+3. Publish to Feishu wiki and broadcast (see Step 8)
 
-### Step 7: Feishu Publish & Broadcast (automatic)
+### Step 8: Feishu Publish & Broadcast (automatic)
 
 After saving the digest locally, **always** publish to Feishu and broadcast. Do not ask — this is part of the digest flow.
 
-All Feishu operations use curl（MCP 不支持文件上传，且 `im_v1_message_create` 对卡片消息有 JSON 序列化问题）。凭据从 `~/.claude.json` > `mcpServers` > `lark-mcp` > `args` 中读取 `-a` (app_id) 和 `-s` (app_secret)。
-
-用一个 Python 脚本完成 7a + 7b 全流程，示例：
+**使用共享脚本** `~/.claude/skills/_shared/feishu_publish.py`：
 
 ```python
-import json, subprocess, time, re, os
+exec(open(os.path.expanduser('~/.claude/skills/_shared/feishu_publish.py')).read())
 
-def curl_json(args):
-    r = subprocess.run(['curl', '-s'] + args, capture_output=True, text=True)
-    return json.loads(r.stdout)
-
-# --- 读取凭据 ---
-with open(os.path.expanduser('~/.claude.json')) as f:
-    config = json.load(f)
-lark_args = config['mcpServers']['lark-mcp']['args']
-app_id = lark_args[lark_args.index('-a') + 1]
-app_secret = lark_args[lark_args.index('-s') + 1]
-
-# --- 获取 tenant_access_token ---
-token = curl_json(['-X', 'POST',
-    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-    '-H', 'Content-Type: application/json',
-    '-d', json.dumps({'app_id': app_id, 'app_secret': app_secret})
-])['tenant_access_token']
-```
-
-**7a. Publish to wiki**:
-
-1. **预处理 markdown**：去掉 YAML frontmatter、`![[image]]`、`[[wikilink]]` → 写入 `/tmp/` 临时文件
-
-2. **上传文件到云盘**：
-```python
-fsize = os.path.getsize(tmp_path)
-resp = curl_json(['-X', 'POST',
-    'https://open.feishu.cn/open-apis/drive/v1/files/upload_all',
-    '-H', f'Authorization: Bearer {token}',
-    '-F', f'file_name={filename}',
-    '-F', 'parent_type=explorer', '-F', 'parent_node=',
-    '-F', f'size={fsize}', '-F', f'file=@{tmp_path}',
-])
-file_token = resp['data']['file_token']
-```
-
-3. **创建导入任务**（`point.mount_key` 是应用根目录 token）：
-```python
-resp = curl_json(['-X', 'POST',
-    'https://open.feishu.cn/open-apis/drive/v1/import_tasks',
-    '-H', f'Authorization: Bearer {token}',
-    '-H', 'Content-Type: application/json',
-    '-d', json.dumps({
-        'file_extension': 'md', 'file_token': file_token,
-        'type': 'docx', 'file_name': '文档标题',
-        'point': {'mount_type': 1, 'mount_key': 'nodcn8QDoQdhGBYxo9yRouGWEpb'}
-    })
-])
-ticket = resp['data']['ticket']
-```
-
-4. **轮询获取 doc_token**（通常 2-4 秒完成）：
-```python
-for i in range(10):
-    time.sleep(2)
-    result = curl_json([
-        f'https://open.feishu.cn/open-apis/drive/v1/import_tasks/{ticket}',
-        '-H', f'Authorization: Bearer {token}',
-    ])
-    doc_token = result.get('data', {}).get('result', {}).get('token')
-    if doc_token:
-        break
-```
-
-5. **移入 wiki 知识库**（根据日报主 tag 选择父节点）：
-```python
-curl_json(['-X', 'POST',
-    'https://open.feishu.cn/open-apis/wiki/v2/spaces/7559794508562251778/nodes/move_docs_to_wiki',
-    '-H', f'Authorization: Bearer {token}',
-    '-H', 'Content-Type: application/json',
-    '-d', json.dumps({
-        'parent_wiki_token': parent_node_token,  # 见下方映射
-        'obj_type': 'docx', 'obj_token': doc_token
-    })
-])
+publish_to_feishu(
+    md_path=os.path.expanduser('~/Documents/obsidian/mixiaomi/日报/X日报-YYYY-MM-DD.md'),
+    doc_title='X/Twitter 日报 - YYYY-MM-DD',
+    wiki_parent_node='IOsNwtIPdiLTYukHdgqcMIE9nad',  # 行业资讯/AI
+    card_template='blue',
+    card_title='X/Twitter 日报 - YYYY-MM-DD',
+    card_summary='**本日 AI 热点速览**\n\n**重大新闻**\n* 要点1\n* 要点2\n\n**热门讨论**\n* 要点1',
+    recipients='all',  # 全员推送
+)
 ```
 
 **父节点映射**：
@@ -260,86 +251,6 @@ curl_json(['-X', 'POST',
 | `技术/*` | `T1mzw30Bkir5IKkzbx9cxDFHnDe` | 行业资讯/技术 |
 | `商业/*` | `EdB8wcEbeigCFPkYqUXcNpZWnlc` | 行业资讯/商业 |
 | `思考/*` | `Xps2wjrCiixmB3kUKZscWLQQnge` | 行业资讯/思考 |
-
-6. **获取 node_token**（等 3 秒让异步移动完成）：
-```python
-time.sleep(3)
-resp = curl_json([
-    f'https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token={doc_token}&obj_type=docx',
-    '-H', f'Authorization: Bearer {token}',
-])
-node_token = resp['data']['node']['node_token']
-```
-
-7. **回写本地 frontmatter**：更新 `feishu_node_token` 和 `feishu_sync_time`
-
-**7b. Broadcast card to all users**:
-
-1. **获取 bot 可用范围内所有用户**：
-```python
-all_users = {}  # {open_id: name}
-
-# 获取授权范围
-scopes = curl_json([
-    'https://open.feishu.cn/open-apis/contact/v3/scopes',
-    '-H', f'Authorization: Bearer {token}',
-]).get('data', {})
-
-# 遍历每个部门获取成员
-for dept_id in scopes.get('department_ids', []):
-    resp = curl_json([
-        f'https://open.feishu.cn/open-apis/contact/v3/users/find_by_department'
-        f'?department_id={dept_id}&user_id_type=open_id'
-        f'&department_id_type=open_department_id&page_size=50',
-        '-H', f'Authorization: Bearer {token}',
-    ])
-    for user in resp.get('data', {}).get('items', []):
-        all_users[user['open_id']] = user.get('name', 'unknown')
-
-# 补充直接指定的用户
-for uid in scopes.get('user_ids', []):
-    if uid not in all_users:
-        all_users[uid] = f'user_{uid[-8:]}'
-```
-
-2. **构建卡片消息**：
-```python
-card = {
-    "config": {"wide_screen_mode": True},
-    "header": {
-        "title": {"tag": "plain_text", "content": "日报标题"},
-        "template": "blue"
-    },
-    "elements": [
-        {"tag": "div", "text": {"tag": "lark_md", "content": (
-            "**本周 AI 热点速览**\n\n"
-            "**重大新闻**\n* 要点1\n* 要点2\n\n"
-            "**热门讨论**\n* 要点1\n* 要点2\n\n"
-            "**工具推荐**\n* 要点1\n* 要点2"
-        )}},
-        {"tag": "action", "actions": [{
-            "tag": "button",
-            "text": {"tag": "plain_text", "content": "查看完整日报"},
-            "url": f"https://huazhi-ai.feishu.cn/docx/{doc_token}",
-            "type": "primary"
-        }]}
-    ]
-}
-```
-
-3. **逐个发送私信**（限流 0.1s/条）：
-```python
-for uid, name in all_users.items():
-    body = {"receive_id": uid, "msg_type": "interactive",
-            "content": json.dumps(card, ensure_ascii=False)}
-    resp = curl_json(['-X', 'POST',
-        'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id',
-        '-H', f'Authorization: Bearer {token}',
-        '-H', 'Content-Type: application/json',
-        '-d', json.dumps(body, ensure_ascii=False),
-    ])
-    time.sleep(0.1)
-```
 
 **权限要求**：`wiki:wiki` + `drive:drive` + `im:message` + `contact:user.base:readonly`
 
@@ -417,11 +328,14 @@ Managed in `references/core_accounts.yaml`. Read this file at the start of `dige
 - 必须用 `keyboard_type`（键盘事件），不能用 `type`（page.fill），因为 Grok textarea 是 React 受控组件
 - 提交用 `\n` 结尾即可，无需找发送按钮
 - 所有 action 必须在同一次 `browser_action` 调用中完成（含 url 参数），页面在调用间会关闭
-- 等待回复用 `eval_js` + `setTimeout` 15 秒后提取 `document.body.innerText`
+- 等待回复用 **观察者模式**（轮询文本长度变化），而非固定等待时间。典型 20-40 秒完成
+- 每次调用 `?new=true` 开新对话
 
 ### 推文抓取最佳实践
 
-`platform_read(platform="generic")` 只拿到首屏/置顶推文。深度抓取用 `browser_action`:
+`platform_read(platform="x")` 现在每条推文都包含 `[View tweet](URL)` 链接，可直接使用。
+
+深度抓取仍可用 `browser_action`:
 
 ```javascript
 // 1. 先滚动加载更多

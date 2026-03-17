@@ -1,0 +1,36 @@
+core:
+  - 具身智能
+  - 人形机器人
+  - humanoid robot
+  - embodied AI
+
+commercial:
+  - 量产
+  - 商业化
+  - 融资
+  - 订单
+  - mass production
+
+tech:
+  - 灵巧手
+  - 运动控制
+  - 强化学习
+  - sim-to-real
+  - VLA模型
+
+supply_chain:
+  - 减速器
+  - 谐波减速器
+  - 电机
+  - 力矩传感器
+  - 六维力传感器
+
+companies:
+  - 智元机器人/Agibot
+  - 宇树科技/Unitree
+  - Figure AI
+  - Tesla Optimus
+  - Boston Dynamics
+  - 银河通用/Galbot
+  - 绿的谐波
+  - 汇川技术
