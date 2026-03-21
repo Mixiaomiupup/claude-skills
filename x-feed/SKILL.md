@@ -302,6 +302,8 @@ status: enriched
 
 After saving the digest locally, **always** publish to Feishu and broadcast. Do not ask — this is part of the digest flow.
 
+**更新模式**: `publish_to_feishu()` 自动检测 frontmatter 中的 `feishu_node_token`。若已存在，则清空旧文档并覆盖内容（URL 不变、不产生重复文档）；若不存在，则新建文档并移入知识库。
+
 **使用共享脚本** `~/.claude/skills/_shared/feishu_publish.py`：
 
 ```python

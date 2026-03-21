@@ -147,17 +147,17 @@ def article_to_markdown(article: dict, media_entities: list) -> str:
         if media_id and img_url:
             media_lookup[media_id] = img_url
 
-    # 构建 entity key -> media_id 映射
+    # 构建 entity index -> media_id 映射
+    # entityRanges 的 key 是 entityMap 列表的索引（int），不是 entry 内部的 key 字段
     entity_media = {}
-    for entry in entity_map:
-        key = entry.get("key")
+    for idx, entry in enumerate(entity_map):
         value = entry.get("value", {})
         if value.get("type") == "MEDIA":
             items = value.get("data", {}).get("mediaItems", [])
             for item in items:
                 mid = str(item.get("mediaId", ""))
                 if mid:
-                    entity_media[key] = mid
+                    entity_media[idx] = mid
 
     for block in blocks:
         block_type = block.get("type", "unstyled")

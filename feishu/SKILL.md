@@ -696,33 +696,35 @@ Wiki APIs return error 99991663 if:
 
 ### 核心结论
 
-**文档图片操作（`replace_image`、创建带内容的图片 block）必须使用 `user_access_token`。** `tenant_access_token` 可以上传文件到云盘，但无法将图片绑定到文档 block。
+**2026-03-21 更新**：`tenant_access_token` 已验证可以完成图片上传全流程（创建空 block + medias/upload_all + replace_image），无需 `user_access_token`。此前记录的 `1770013 relation mismatch` 错误可能与旧版 API 或特定权限配置有关。
+
+**当前结论**：优先使用 `tenant_access_token`，仅在遇到权限错误时降级到 `user_access_token`。
 
 | 操作 | tenant_access_token | user_access_token |
 |------|:---:|:---:|
-| 上传图片 `upload_all` | ✅ | ✅ |
-| 创建空图片 block | ⚠️ block 创建但 token 为空（黑块） | ✅ |
-| `replace_image` 绑定图片 | ❌ 1770013 relation mismatch | ✅ |
+| 上传图片 `medias/upload_all` | ✅ | ✅ |
+| 创建空图片 block | ✅ | ✅ |
+| `replace_image` 绑定图片 | ✅（2026-03 验证） | ✅ |
 
 ### 完整流程（3 步）
 
-**前置条件**: 已获取 `user_access_token`（见下方「获取 user_access_token」章节）
+**使用 `tenant_access_token` 或 `user_access_token` 均可。**
 
 ```bash
-UAT="<user_access_token>"
+TOKEN="<tenant_access_token 或 user_access_token>"
 DOC="<document_obj_token>"
 
 # Step 1: 在文档指定位置创建空图片 block
 # index 是 Page block 的 child index（flat list index - 1）
 BLOCK_ID=$(curl -s -X POST "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks/$DOC/children" \
-  -H "Authorization: Bearer $UAT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"children": [{"block_type": 27, "image": {}}], "index": <target_child_index>}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['children'][0]['block_id'])")
 
 # Step 2: 上传图片，parent_node 必须是图片 block_id（不是 doc_id！）
 FILE_TOKEN=$(curl -s -X POST 'https://open.feishu.cn/open-apis/drive/v1/medias/upload_all' \
-  -H "Authorization: Bearer $UAT" \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file_name=image.png" \
   -F "parent_type=docx_image" \
   -F "parent_node=$BLOCK_ID" \
@@ -732,7 +734,7 @@ FILE_TOKEN=$(curl -s -X POST 'https://open.feishu.cn/open-apis/drive/v1/medias/u
 
 # Step 3: replace_image 绑定图片到 block
 curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks/$BLOCK_ID" \
-  -H "Authorization: Bearer $UAT" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"replace_image\":{\"token\":\"$FILE_TOKEN\"}}"
 ```

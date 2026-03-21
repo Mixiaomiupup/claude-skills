@@ -82,8 +82,86 @@ feishu_sync_time: ""           # 最后同步时间（同步后填充）
 4. 末尾追加空的 `## 我的笔记` 区域
 5. 文件名：用中文，简洁概括内容主题（如 `AI读书助手.md`）
 6. **飞书同步**（可选）— 写入本地后，询问用户「是否同步到飞书知识库？」
-   - 若确认：根据 `category` 一级分类查 `feishu` skill 映射表 → 调用飞书 API 创建文档节点 → 更新本地 frontmatter 的 `feishu_node_token` 和 `feishu_sync_time`
    - 若拒绝：跳过，仅保留本地
+   - 若确认：执行**飞书发布流程**（见 1.6）
+
+### 1.6 飞书发布流程
+
+用户说"推送飞书"或确认同步时，执行此完整流程。**必须按顺序执行所有步骤，不可跳过 Mermaid 转图片。**
+
+#### Step 1: 判断新建 vs 更新
+
+读取文件 frontmatter 的 `feishu_node_token`：
+
+| feishu_node_token | 操作 | 方法 |
+|-------------------|------|------|
+| 空 | **新建文档** | curl 文件上传导入 → moveDocsToWiki |
+| 有值 | **更新文档** | 删除旧飞书文档 → 重新导入（全量替换） |
+
+**更新流程**（feishu_node_token 有值时）：
+1. 用 `wiki_v2_space_getNode` 获取旧文档的 `obj_token`
+2. 用 `drive_v1_file_delete` 删除旧文档（type=docx, token=obj_token）
+3. 按新建流程重新导入（见 Step 2-4）
+4. 用 `wiki_v2_spaceNode_moveDocsToWiki` 移入同一个父节点
+5. 更新本地 frontmatter 的 `feishu_node_token`（新 node_token）和 `feishu_sync_time`
+
+#### Step 2: 预处理 Markdown
+
+```python
+import re
+with open(file_path) as f:
+    content = f.read()
+# 去掉 YAML frontmatter
+content = re.sub(r'^---\n.*?\n---\n', '', content, count=1, flags=re.DOTALL)
+# [[wikilink]] → 纯文本
+content = re.sub(r'\[\[([^\]]+)\]\]', r'\1', content)
+# 去掉 Obsidian 图片嵌入
+content = re.sub(r'!\[\[.*?\]\]\n?', '', content)
+with open('/tmp/feishu_upload.md', 'w') as f:
+    f.write(content.strip())
+```
+
+#### Step 3: 上传并导入
+
+1. 获取 `tenant_access_token`（从 `~/.claude.json` 读取 app_id/app_secret）
+2. `curl upload_all` 上传 `/tmp/feishu_upload.md`
+3. `curl import_tasks` 创建导入任务（point.mount_key = `nodcn8QDoQdhGBYxo9yRouGWEpb`）
+4. 轮询 `import_tasks/{ticket}` 获取 `doc_token`
+5. 根据 `category` 一级分类查 `feishu` skill 标签→节点映射表 → `wiki_v2_spaceNode_moveDocsToWiki`
+6. 更新本地 frontmatter 的 `feishu_node_token` 和 `feishu_sync_time`
+
+#### Step 4: Mermaid 转图片（必须执行）
+
+**检测**：如果原始 Markdown 中包含 ` ```mermaid ` 代码块，**必须**执行以下步骤：
+
+1. **提取并渲染**：
+   ```bash
+   # 从原始 md 中提取 mermaid 块，渲染为 PNG
+   mmdc -i /tmp/mermaid_N.mmd -o /tmp/mermaid_N.png -w 1460 -b white --scale 2
+   ```
+
+2. **定位飞书中的代码块**：
+   ```python
+   # GET /docx/v1/documents/{doc_id}/blocks?page_size=500
+   # 找 block_type=14 且内容含 graph/sequenceDiagram/flowchart/classDiagram
+   ```
+
+3. **从后往前替换**（避免 index 偏移）：
+   ```
+   对每个 mermaid 代码块（从最后一个开始）：
+   a. DELETE batch_delete 删除代码块（用 child_index）
+   b. POST children/create 创建空图片块（block_type=27, image={}）
+   c. curl upload medias/upload_all（parent_type=docx_image, parent_node=图片block_id）
+   d. PATCH replace_image 绑定图片到 block
+   每步间 sleep 0.5s
+   ```
+
+4. **完成**：报告替换了 N 个 Mermaid 图表
+
+**注意**：
+- `tenant_access_token` 可以完成图片上传和绑定（已验证）
+- `child_index` = Page block 的 child index，不含 Page 自身
+- 必须从后往前处理，否则删除会导致后续 index 偏移
 
 ### 1.5 写入示例
 
@@ -314,10 +392,10 @@ updated: YYYY-MM-DD
 
 扫描本地 vault 中有 `feishu_node_token` 但内容已更新的文件：
 
-1. `Grep "^feishu_node_token:"` 找到所有已同步文件
+1. `Grep "^feishu_node_token:"` 找到所有已同步文件（排除空值）
 2. 对比 `feishu_sync_time` 与文件修改时间
-3. 若本地更新 → 读取内容 → 用 `docx_builtin_import` 更新飞书文档
-4. 更新本地 `feishu_sync_time`
+3. 若本地更新 → 按 **Section 1.6 飞书发布流程** 执行（Step 1 判断为更新 → 删除旧文档 → 重新导入 → Mermaid 转图片）
+4. 更新本地 `feishu_node_token`（新值）和 `feishu_sync_time`
 
 #### 飞书→本地（Pull）
 
