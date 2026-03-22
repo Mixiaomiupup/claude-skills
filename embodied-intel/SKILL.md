@@ -7,7 +7,7 @@ description: "Embodied AI industry intelligence briefing system - daily digest o
 
 面向企业管理者的具身AI/人形机器人行业日报。通过多源数据采集（Grok 搜索 + 核心账号 + Tavily），生成情报摘要，发布到飞书并推送。
 
-**工具依赖**：`ucal_browser_action`（Grok 搜索）、`ucal_platform_read`（核心账号推文）、`tavily_search`（补充搜索）、lark-mcp bitable（人物表）、飞书 API（发布+推送）
+**工具依赖**：`anyweb` CLI（Grok 搜索 + 核心账号推文）、`tavily_search`（补充搜索）、lark-mcp bitable（人物表）、飞书 API（发布+推送）
 
 ## Mode Router
 
@@ -23,7 +23,7 @@ description: "Embodied AI industry intelligence briefing system - daily digest o
 ### Step 1: Load Tools
 
 ```
-ToolSearch: "+ucal" -> ucal_browser_action, ucal_platform_read
+# anyweb CLI available via Bash tool (anyweb open/read/eval/type/wait/scroll)
 ToolSearch: "+tavily search" -> tavily_search
 ToolSearch: "+lark bitable record" -> appTableRecord_list, appTableRecord_batchUpdate
 ```
@@ -38,32 +38,33 @@ ToolSearch: "+lark bitable record" -> appTableRecord_list, appTableRecord_batchU
 
 读取 `references/core_accounts.yaml` → 对核心账号抓取最新推文：
 
-```
-ucal_platform_read(platform="x", url="https://x.com/{account}")
+```bash
+anyweb --json read "https://x.com/{account}"
 ```
 
 每个账号抓取最近 5-10 条推文。**每条推文现在包含 `[View tweet](URL)` 链接**，直接使用。
 
-推荐并行 3-5 个 platform_read 调用。
+推荐并行 3-5 个 read 调用。
 
 #### 2b: Grok Search（主搜索源）
 
-通过 `ucal_browser_action` 调用 Grok 搜索 X/Twitter。每次搜索必须在**单次** `browser_action` 调用中完成所有动作。
+通过 `anyweb` 原子命令调用 Grok 搜索 X/Twitter。anyweb daemon 在命令间保持页面状态，每步串行执行即可。
 
-**单次 Grok 搜索模板（观察者模式）**：
+**Grok 搜索模板（观察者模式）**：
 
 用轮询代替固定等待 — 观察页面文本是否经历过增长并稳定下来，自动判断回复完成。
-典型 20-40 秒完成（比旧版固定 50s 更快更可靠）。
+典型 20-40 秒完成。
 
-```
-ucal_browser_action(
-  url: "https://x.com/i/grok?new=true",
-  actions: [
-    {type: "wait", selector: "textarea[placeholder='Ask anything']", timeout: 15000},
-    {type: "keyboard_type", selector: "textarea[placeholder='Ask anything']", text: "<问题>. Include tweet URLs.\n"},
-    {type: "eval_js", expression: "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"}
-  ]
-)
+```bash
+# 1. 打开 Grok 新对话
+anyweb open "https://x.com/i/grok?new=true"
+# 2. 等待输入框出现
+anyweb wait selector "textarea[placeholder='Ask anything']" --timeout 15000
+# 3. 点击输入框并输入问题（用 type 命令，底层是键盘事件）
+anyweb click "textarea[placeholder='Ask anything']"
+anyweb type "<问题>. Include tweet URLs.\n"
+# 4. 观察者等待回复完成
+anyweb eval "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"
 ```
 
 **观察者逻辑**：
@@ -73,10 +74,10 @@ ucal_browser_action(
 4. 超过 120 秒兜底超时
 
 **关键注意事项**：
-- 必须用 `keyboard_type`（键盘事件），不能用 `type`（page.fill），因为 Grok textarea 是 React 受控组件
+- anyweb `type` 命令底层使用键盘事件（`page.keyboard.type`），适配 React 受控组件
 - 提交方式：问题末尾加 `\n`
 - 每次调用 `?new=true` 开新对话，避免历史残留
-- **页面状态不跨调用保持**：每次 `browser_action` 调用之间页面重置为 `about:blank`，所有操作必须在同一次调用中完成
+- **anyweb daemon 在命令间保持页面状态**，不需要把所有操作塞进一次调用
 - **每个问题必须包含 "Include tweet URLs"**
 
 **搜索轮次**（3-4 轮，串行）：

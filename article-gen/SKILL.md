@@ -95,7 +95,7 @@ tavily_extract(urls=["https://..."], include_images=True, format="markdown")
 
 # 错误做法（图片会丢失）
 tavily_extract(urls=["https://..."])  # include_images 默认 false
-ucal_platform_read(platform="generic", url="https://...")  # 不返回图片 URL
+anyweb --json read "https://..."  # 不返回图片 URL
 ```
 
 抓取结果中的图片以 `![alt](url)` 格式出现在 raw content 中。保存文章时：

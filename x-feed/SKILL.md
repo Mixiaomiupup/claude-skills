@@ -7,9 +7,9 @@ description: "X/Twitter information feed system - follow expansion, hot topic ex
 
 Orchestrate existing tools to manage Twitter information flow: discover accounts, extract hot content, distill knowledge.
 
-**Tools used**: `ucal_browser_action`, `ucal_platform_read`, `ucal_platform_search` (load via ToolSearch first), `x2md` skill, `kb` skill, `feishu` skill.
+**Tools used**: `anyweb` CLI (via Bash tool), `x2md` skill, `kb` skill, `feishu` skill.
 
-**Prerequisite**: Load ucal tools via `ToolSearch` query `+ucal` before any mode.
+**Prerequisite**: anyweb must be installed (`pip install -e ~/projects/anyweb` or `pip install anyweb`). Verify with `anyweb doctor`.
 
 ---
 
@@ -102,44 +102,45 @@ Expand follow matrix by finding valuable accounts.
 
 ### Method A: Grok Recommendations (fast)
 
-1. `ucal_browser_action` with `url: "https://x.com/i/grok?new=true"` and actions:
-   - `wait` for `textarea[placeholder='Ask anything']` (timeout 15s)
-   - `keyboard_type` (NOT `type`) on that selector with question text + `\n` to submit
-   - `eval_js` with **observer pattern** (see Grok 搜索模板) — polls until response text stabilizes, then extracts
-2. Ask domain-specific questions, e.g.:
-   - "AI programming leaders worth following on Twitter. Include tweet URLs."
-   - "Best indie hacker Chinese Twitter accounts. Include tweet URLs."
-   - User-specified domain queries
-3. Grok returns recommendations + referenced posts
-4. Optionally click "Posts" tab to extract recommended accounts from cited tweets
-5. Filter out already-followed accounts
-6. Present candidates to user
+Use anyweb atomic commands to interact with Grok. The daemon keeps page state between commands.
 
-**Important**: Use `keyboard_type` (keyboard events), not `type` (page.fill), as Grok's textarea is a React controlled component. Keep all actions in a single `browser_action` call — the page closes between separate calls.
+```bash
+# Step 1: Open Grok (auto-loads X session cookies)
+anyweb open "https://x.com/i/grok?new=true"
+
+# Step 2: Wait for textarea
+anyweb wait selector "textarea" --timeout 15000
+
+# Step 3: Type question (keyboard events for React)
+anyweb click "textarea"
+anyweb type "AI programming leaders worth following on Twitter. Include tweet URLs.\n"
+
+# Step 4: Wait for response with observer pattern
+anyweb eval "<observer JS>"
+```
+
+Ask domain-specific questions:
+- "AI programming leaders worth following on Twitter. Include tweet URLs."
+- "Best indie hacker Chinese Twitter accounts. Include tweet URLs."
+- User-specified domain queries
 
 ### Method B: Seed Cross-Analysis (deep)
 
 1. **Select seeds** - User-specified or from `references/core_accounts.yaml` `discover_seeds` list
 2. **Fetch following lists** - For each seed:
-   ```
-   ucal_platform_read(platform="x", url="https://x.com/{seed}/following")
+   ```bash
+   anyweb --json read "https://x.com/{seed}/following"
    ```
    Collect 50-100 following per seed
-3. **Cross-reference** - Find accounts followed by multiple seeds:
-   - Count `overlap_count` (how many seeds follow this account)
-   - Filter out already-followed accounts
+3. **Cross-reference** - Find accounts followed by multiple seeds
 4. **Rank** - Sort by `overlap_count` descending
-5. **Optional enrichment** - Visit candidate profiles to get bio, use LLM to judge domain relevance
-6. **Present results**:
-   ```
-   @handle | Display Name | Bio | Followed by N seeds
-   ```
+5. **Present results**
 
 Methods A+B can combine: Grok for fast discovery, seed analysis for validation.
 
 ### Batch Follow (requires user confirmation)
 
-Present recommended list -> user selects -> `ucal_browser_action` to Follow each selected account one by one.
+Present recommended list -> user selects -> use anyweb atomic commands (open profile → click Follow) for each.
 
 ---
 
@@ -149,31 +150,34 @@ Generate a daily Twitter digest of hot content.
 
 ### Step 1: Grok Hot Topic Scan (primary source)
 
-1. `ucal_browser_action` with `url: "https://x.com/i/grok?new=true"` and actions:
-   - `wait` for `textarea[placeholder='Ask anything']` (timeout 15s)
-   - `keyboard_type` on that selector with question + `\n`
-   - `eval_js` wait **50s** then extract `document.body.innerText` (up to 8000 chars)
-2. Ask topic-focused questions (**always include "Include tweet URLs"**):
-   - "What are today's hot topics in AI and programming? Include tweet URLs."
-   - "Latest developments with Claude/GPT/LLM today? Include tweet URLs."
-   - User-specified topics
-3. Grok returns summary + cited posts with real tweet URLs
-4. Optionally navigate to the conversation URL (`x.com/i/grok?conversation=<id>`) for follow-up extraction
+Use anyweb atomic commands for Grok interaction. **All commands share the same daemon page**.
 
-**Grok 搜索模板（观察者模式）**：
+```bash
+# 1. Open Grok
+anyweb open "https://x.com/i/grok?new=true"
 
-用轮询代替固定等待 — 观察页面文本是否经历过增长并稳定下来，自动判断回复完成。
-典型 20-40 秒完成（比旧版固定 50s 更快更可靠）。
+# 2. Wait for textarea
+anyweb wait selector "textarea" --timeout 15000
 
+# 3. Type question
+anyweb click "textarea"
+anyweb type "<问题>. Include tweet URLs.\n"
+
+# 4. Observer pattern — wait for response to stabilize, then extract
+anyweb eval "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"
 ```
-ucal_browser_action(
-  url: "https://x.com/i/grok?new=true",
-  actions: [
-    {type: "wait", selector: "textarea[placeholder='Ask anything']", timeout: 15000},
-    {type: "keyboard_type", selector: "textarea[placeholder='Ask anything']", text: "<问题>. Include tweet URLs.\n"},
-    {type: "eval_js", expression: "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"}
-  ]
-)
+
+Ask topic-focused questions (**always include "Include tweet URLs"**):
+- "What are today's hot topics in AI and programming? Include tweet URLs."
+- "Latest developments with Claude/GPT/LLM today? Include tweet URLs."
+
+**For subsequent Grok questions**, reopen with `?new=true` to start a fresh conversation:
+```bash
+anyweb open "https://x.com/i/grok?new=true"
+anyweb wait selector "textarea" --timeout 15000
+anyweb click "textarea"
+anyweb type "<next question>. Include tweet URLs.\n"
+anyweb eval "<observer JS>"
 ```
 
 **观察者逻辑**：
@@ -190,8 +194,8 @@ ucal_browser_action(
 
 1. Read `references/core_accounts.yaml` -> select 5-10 accounts across categories
 2. For each account:
-   ```
-   ucal_platform_read(platform="x", url="https://x.com/{user}")
+   ```bash
+   anyweb --json read "https://x.com/{user}"
    ```
    Grab recent 5 tweets per account — **each tweet now includes a `[View tweet](URL)` link**
 3. Supplements niche high-quality content Grok may miss
@@ -209,8 +213,8 @@ tavily_search(query="AI OR Claude OR GPT OR LLM", time_range="day", max_results=
 
 ### Step 3.5: Keyword Search (optional)
 
-```
-ucal_platform_search(platform="x", query="AI OR Claude OR GPT OR LLM", limit=10)
+```bash
+anyweb --json search x "AI OR Claude OR GPT OR LLM" --limit 10
 ```
 
 ### Step 4: Dedup Against Previous Digests
@@ -288,7 +292,7 @@ status: enriched
 
 ---
 
-> 数据来源: Grok Search + Core Accounts (platform_read) + Tavily
+> 数据来源: Grok Search + Core Accounts (anyweb read) + Tavily
 > 去重参考: X日报-YYYY-MM-DD
 ```
 
@@ -401,25 +405,26 @@ Managed in `references/core_accounts.yaml`. Read this file at the start of `dige
 
 ### Grok 交互注意事项
 
-- 必须用 `keyboard_type`（键盘事件），不能用 `type`（page.fill），因为 Grok textarea 是 React 受控组件
+- anyweb daemon 在命令间保持页面状态，不需要把所有操作塞进一次调用
+- 必须用 `anyweb type`（键盘事件），Grok textarea 是 React 受控组件
 - 提交用 `\n` 结尾即可，无需找发送按钮
-- 所有 action 必须在同一次 `browser_action` 调用中完成（含 url 参数），页面在调用间会关闭
-- 等待回复用 **观察者模式**（轮询文本长度变化），而非固定等待时间。典型 20-40 秒完成
-- 每次调用 `?new=true` 开新对话
+- 等待回复用 **观察者模式**（eval JS 轮询文本长度变化），典型 20-40 秒完成
+- 每次新问题用 `anyweb open "https://x.com/i/grok?new=true"` 开新对话
+- `anyweb open` 自动从 URL 识别平台并加载对应 session cookie
 
 ### 推文抓取最佳实践
 
-`platform_read(platform="x")` 现在每条推文都包含 `[View tweet](URL)` 链接，可直接使用。
+`anyweb read "https://x.com/{user}"` 每条推文包含 `[View tweet](URL)` 链接，可直接使用。
 
-深度抓取仍可用 `browser_action`:
+深度抓取用原子命令组合:
 
-```javascript
-// 1. 先滚动加载更多
-{"type": "scroll", "direction": "down", "amount": 2000}
-// 2. 等待加载
-{"type": "eval_js", "expression": "new Promise(r => setTimeout(r, 2000))"}
-// 3. JS 提取推文数据
-{"type": "eval_js", "expression": "document.querySelectorAll('article[role=\"article\"]')..."}
+```bash
+# 1. 先滚动加载更多
+anyweb scroll down --amount 2000
+# 2. 等待加载
+anyweb eval "new Promise(r => setTimeout(r, 2000))"
+# 3. JS 提取推文数据
+anyweb eval "..."
 ```
 
 **推文 DOM 选择器**:
@@ -427,10 +432,6 @@ Managed in `references/core_accounts.yaml`. Read this file at the start of `dige
 - 正文: `[data-testid="tweetText"]`
 - 时间: `time[datetime]`
 - 互动: `[data-testid="reply"]`, `[data-testid="retweet"]`, `[data-testid="like"]` 的 `aria-label`
-
-### MCP Server 代码更新
-
-修改 `twitter.py` 或 `server.py` 后需重启 Claude Code 会话，MCP server 才会加载新代码。运行中的 server 用旧代码。
 
 ### 日报保存路径
 
