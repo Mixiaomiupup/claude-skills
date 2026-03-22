@@ -25,6 +25,15 @@ graph LR
     feishu --> lark-mcp[lark-mcp<br/>飞书MCP工具]
 
     embodied-intel[embodied-intel<br/>具身智能资讯] --> kb
+
+    subgraph 浏览器自动化
+        anyweb[anyweb CLI<br/>daemon架构]
+    end
+
+    ucal -.->|调用| anyweb
+    x-feed -.->|调用| anyweb
+    embodied-intel -.->|调用| anyweb
+    article-gen -.->|调用| anyweb
 ```
 
 ### 1.2 项目管理与通知链路
@@ -74,7 +83,7 @@ graph LR
 | **commit** | Git提交消息生成 | - | 109 | Google convention风格 |
 | **debug** | 系统性调试 | - | 219 | 症状分析→根因→方案 |
 | **doc-control** | 文档生成控制 | - | 151 | 防止过度生成文档 |
-| **embodied-intel** | 具身智能行业资讯 | - | 302 | 日报、人物追踪、人才流动 |
+| **embodied-intel** | 具身智能行业资讯 | anyweb CLI | 302 | 日报、人物追踪、人才流动 |
 | **explain** | 代码解释 | - | 119 | 类比、图解、分步拆解 |
 | **feishu** | 飞书API参考 | lark-mcp | 948 | Wiki/Doc/Bitable/IM/Drive/Sheets 168工具 |
 | **gemini-image** | Gemini图片生成 | - | 62 | 生成、编辑、理解 |
@@ -89,8 +98,8 @@ graph LR
 | **skill-creator** | Skill创建/编辑 | - | 485 | 创建、修改、性能度量 |
 | **sync-config** | 配置同步 | git | 127 | 备份/恢复/推送Claude配置 |
 | **test** | 测试生成 | - | 216 | 单元测试 + 集成测试 |
-| **ucal** | 跨平台内容分析 | ucal-mcp | 355 | 小红书/知乎/X/通用网页 |
-| **x-feed** | X信息流系统 | feishu, kb | 437 | 关注扩展、热点提取、知识蒸馏 |
+| **ucal** | 跨平台内容分析 | anyweb CLI | 265 | 小红书/知乎/X/通用网页 |
+| **x-feed** | X信息流系统 | anyweb CLI, feishu, kb | 437 | 关注扩展、热点提取、知识蒸馏 |
 | **x2md** | X链接→Markdown | - | 100 | 帖子/Thread/长文转换 |
 | **youpin** | 悠悠有品查询 | - | 174 | 订单/库存/收益/市场行情(只读) |
 
@@ -115,12 +124,33 @@ graph LR
 
 ```
 X链接 → x2md → Obsidian笔记
-X信息流 → x-feed → Obsidian + 飞书
-网页链接 → ucal → 分析结果
-行业资讯 → embodied-intel → Obsidian + 飞书
+X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
+网页链接 → ucal (anyweb CLI) → 分析结果
+行业资讯 → embodied-intel (anyweb CLI) → Obsidian + 飞书
 ```
 
-### 3.3 项目管理链路
+### 3.3 浏览器自动化: ucal MCP → anyweb CLI
+
+**2026-03-22 迁移完成**。所有 skill 从 `ucal_platform_read` / `ucal_browser_action` MCP 调用迁移到 `anyweb` CLI 原子命令。
+
+| 维度 | ucal (旧) | anyweb (新) |
+|------|----------|------------|
+| 架构 | MCP server (FastMCP) | CLI + Unix socket daemon |
+| 调用方式 | MCP tool call，单次批量 action | `anyweb open/read/eval/type` 逐条命令 |
+| 页面状态 | 每次 `browser_action` 调用间重置 | daemon 在命令间保持页面状态 |
+| 延迟 | ~3s（每次启动浏览器） | ~50ms（daemon 保持浏览器常驻） |
+| 平台智能 | 内置 xhs/zhihu/x 适配器 | 同（复用适配器代码） |
+| 反检测 | stealth + anti-detect | 同 |
+| 会话管理 | 按平台隔离 context | 同 + URL 自动检测平台 |
+| MCP 兼容 | 原生 | `anyweb --mcp` 兼容层 |
+
+**受影响的 skill**: ucal, x-feed, embodied-intel, article-gen
+
+**MCP 配置**: `~/.claude.json` 中 `ucal` server 已替换为 `anyweb`
+
+**仓库**: GitHub `Mixiaomiupup/anyweb`, ucal 仓库保留作为历史归档
+
+### 3.4 项目管理链路
 
 ```
 云效迭代 → project-sync → 飞书多维表格 (数据同步)
@@ -133,5 +163,6 @@ X信息流 → x-feed → Obsidian + 飞书
 
 | 日期 | 涉及 Skill | 变更摘要 |
 |------|-----------|---------|
+| 2026-03-22 | ucal, x-feed, embodied-intel, article-gen | **ucal→anyweb 迁移**: 所有 skill 从 ucal MCP 调用迁移到 anyweb CLI 原子命令；MCP 配置从 ucal 切换到 anyweb；新增 Section 3.3 迁移对比表 |
 | 2026-03-21 | kb, feishu | **飞书发布流程重构**: kb 新增 Section 1.6 完整发布链路(新建/更新判断 + 预处理 + 导入 + Mermaid转图片必须执行)；feishu 图片上传改为 tenant_token 优先(此前错误记录为必须UAT) |
 | 2026-03-21 | ARCHITECTURE.md | **初始创建**: 扫描全部 24 个 skill，建立架构全景、工作流地图、索引表 |
