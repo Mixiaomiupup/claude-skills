@@ -471,15 +471,18 @@ mcp__lark-mcp__wiki_v2_spaceNode_moveDocsToWiki
 
 ## 发布文档到飞书知识库
 
+### ⚠️ 核心规则：更新文档 = 原地修改，禁止删除重建
+
+**Bot 没有 wiki 节点和文档的删除权限。** 更新已有文档时，必须用 Document Block API 原地修改，绝对不要删除旧文档再重新上传。删除会失败并留下孤立文档。
+
 ### 方法选择指南
 
-| 场景 | 推荐方法 | 原因 |
-|------|---------|------|
-| 新发布 / 全量更新长文档 | **curl 文件上传导入** | 快速、格式稳定 |
-| 更新已发布文档（改链接、改文字） | **Document Block API** | 原地修改，不产生重复文档 |
-| 小改动（加标题、改段落） | **Document Block API** | 增量编辑，不需要重新导入 |
-| 短文档 / 快速测试 | **MCP `docx_builtin_import`** | 最简单，但长文档格式可能出错 |
-| 创建新 wiki 节点 | **MCP `wiki_v2_spaceNode_create`** | 直接创建，无需 curl |
+| 场景 | 方法 | 说明 |
+|------|------|------|
+| **首次发布新文档** | curl 文件上传导入 | 上传 → import → moveDocsToWiki |
+| **更新已有文档（任何规模）** | **Document Block API** | 获取 blocks → 定位 → patch/delete/create。无论改动大小都用这个方法 |
+| 短文档首次发布 | MCP `docx_builtin_import` | 最简单，但长文档格式可能出错 |
+| 创建空 wiki 节点 | MCP `wiki_v2_spaceNode_create` | 直接创建，无需 curl |
 
 ### 方法 1: curl 文件上传导入（推荐）
 
@@ -739,6 +742,15 @@ curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks
   -d "{\"replace_image\":{\"token\":\"$FILE_TOKEN\"}}"
 ```
 
+### Python Helper（feishu_publish.py）
+
+`~/.claude/skills/_shared/feishu_publish.py` 中提供了封装好的 helper：
+
+- **`_insert_image_block(token, doc_token, parent_block_id, image_path, index=-1)`**：完整 3 步插入单张图片
+- **`insert_images_to_doc(token, doc_token, media_dir)`**：批量插入封面 + 推文截图，自动匹配推文位置
+
+`insert_images_to_doc` 会搜索所有文本块类型（text/heading/bullet/ordered/callout/quote），并对 URL 做解码后匹配 tweet ID。
+
 ### 关键注意事项
 
 - **`parent_node` 必须是图片 block_id**，不是文档 ID。这确保上传的素材与目标 block 的关联关系正确
@@ -821,9 +833,9 @@ token 保存在 `/tmp/feishu_uat.json`，格式：
 | `User access token is not configured` | API requires UAT, no login session | Run `login` command or use alternative API |
 | `No active login sessions` | UAT expired | Re-run `npx -y @larksuiteoapi/lark-mcp login -a <id> -s <secret>` |
 | `131005 not found` | Wrong token type passed | Use correct token: node_token for getNode, obj_token for rawContent |
-| `1770013 relation mismatch` | `replace_image` 使用了 tenant_access_token | 必须用 user_access_token，见「文档图片上传」章节 |
+| `1770013 relation mismatch` | `parent_node` 用了 doc_token 而非 image_block_id | Step 2 upload 时 `parent_node` 必须是 Step 1 创建的 image_block_id |
 | `1770001 invalid param` | 图片 block 创建时用了 `token` 字段 | 创建空 block（`image: {}`），再用 `replace_image` 绑定 |
-| 图片显示黑块/加载中 | tenant token 创建的图片 block token 为空 | 用 user_access_token 重新走完整流程 |
+| 图片显示黑块/加载中 | upload 的 parent_node 不是 image block | 用 `_insert_image_block()` helper（见 feishu_publish.py） |
 | `20029 redirect_uri 不合法` | OAuth 重定向 URL 未在应用安全设置中配置 | 去飞书开放平台 > 应用 > 安全设置添加 `http://localhost:9876/callback` |
 | Tool not found in ToolSearch | MCP tool not loaded | Use `ToolSearch` with `+lark <keyword>` to load |
 | Permission denied | App lacks required scope | Add permissions in Feishu Open Platform > App > Permissions |
@@ -860,7 +872,7 @@ PNG 图片 (/tmp/mermaid_N.png)
 ### 前置条件
 
 - `mmdc` (mermaid CLI): `brew install mermaid-cli` 或 `npm i -g @mermaid-js/mermaid-cli`
-- `user_access_token`: 文档图片操作必须用 UAT（见上方「获取 user_access_token」章节）
+- `tenant_access_token` 即可完成图片上传全流程（2026-03 验证）
 
 ### Step 1: 提取并渲染 Mermaid
 

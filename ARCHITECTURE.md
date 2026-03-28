@@ -19,10 +19,13 @@ graph LR
     article-gen[article-gen<br/>文章生成引擎] --> article-image
     article-gen --> feishu
     article-gen --> kb
+    article-gen --> wechat-publish
     article-image[article-image<br/>封面图/配图] --> gemini-image[gemini-image<br/>Gemini图片生成]
 
     kb[kb<br/>Obsidian知识库] --> feishu[feishu<br/>飞书API]
     feishu --> lark-mcp[lark-mcp<br/>飞书MCP工具]
+
+    wechat-publish[wechat-publish<br/>微信公众号发布] -.->|Chrome CDP| chrome[系统Chrome]
 
     embodied-intel[embodied-intel<br/>具身智能资讯] --> kb
 
@@ -101,9 +104,10 @@ graph LR
 | **ucal** | 跨平台内容分析 | anyweb CLI | 265 | 小红书/知乎/X/通用网页 |
 | **x-feed** | X信息流系统 | anyweb CLI, feishu, kb | 437 | 关注扩展、热点提取、知识蒸馏 |
 | **x2md** | X链接→Markdown | - | 100 | 帖子/Thread/长文转换 |
+| **wechat-publish** | 微信公众号发布 | Chrome CDP | 165 | 图片上传→草稿创建→HTML转换→发布 |
 | **youpin** | 悠悠有品查询 | - | 174 | 订单/库存/收益/市场行情(只读) |
 
-**统计**: 24 个 skill, 6500+ 行
+**统计**: 25 个 skill, 6700+ 行
 
 ---
 
@@ -129,7 +133,21 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 行业资讯 → embodied-intel (anyweb CLI) → Obsidian + 飞书
 ```
 
-### 3.3 浏览器自动化: ucal MCP → anyweb CLI
+### 3.3 日报媒体采集与发布链路 (x-feed Step 7.5 + 8)
+
+```
+日报生成 → 封面图(gemini-image + Pillow文字叠加) → 推文截图(anyweb + Pillow裁切)
+    → 嵌入Obsidian(attachments/) → 飞书发布(feishu_publish.py)
+    → 图片插入飞书文档(3-step: 创建空block → upload parent_node=block_id → PATCH replace_image)
+    → 卡片广播(全员私信)
+```
+
+- **封面图**: gemini-image 生成无中文版本 → Pillow 叠加正确中文（STHeiti Medium.ttc）
+- **推文截图**: anyweb 打开推文 → JS 隐藏非正文元素 → screenshot → Pillow 裁切到 article bounds
+- **飞书图片**: `_insert_image_block()` helper 封装 3-step 方法，`insert_images_to_doc()` 批量插入并自动匹配推文位置
+- **媒体目录**: `~/Downloads/x-daily/YYYY-MM-DD/`（cover.png + tweet-{id}.png）
+
+### 3.4 浏览器自动化: ucal MCP → anyweb CLI
 
 **2026-03-22 迁移完成**。所有 skill 从 `ucal_platform_read` / `ucal_browser_action` MCP 调用迁移到 `anyweb` CLI 原子命令。
 
@@ -150,7 +168,7 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 
 **仓库**: GitHub `Mixiaomiupup/anyweb`, ucal 仓库保留作为历史归档
 
-### 3.4 项目管理链路
+### 3.5 项目管理链路
 
 ```
 云效迭代 → project-sync → 飞书多维表格 (数据同步)
@@ -163,6 +181,8 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 
 | 日期 | 涉及 Skill | 变更摘要 |
 |------|-----------|---------|
+| 2026-03-23 | wechat-publish | **新增 skill**: 微信公众号发布流程(系统Chrome CDP + API)；涵盖图片上传、草稿创建、HTML转换、发布、修改已发表文章；关键约束：禁止 margin:-16px、必须用系统Chrome(非Playwright) |
+| 2026-03-23 | x-feed, feishu, feishu_publish.py | **日报媒体链路**: x-feed 新增 Step 7.5(封面图+推文截图+Obsidian嵌入)；feishu_publish.py 重写 insert_images_to_doc() 使用 3-step 方法(_insert_image_block helper)，修复 block text 搜索范围(+bullet/ordered/callout)和 URL 解码匹配；feishu SKILL.md 更新 troubleshooting 和 helper 说明；ARCHITECTURE 新增 Section 3.3 媒体链路 |
 | 2026-03-22 | ucal, x-feed, embodied-intel, article-gen | **ucal→anyweb 迁移**: 所有 skill 从 ucal MCP 调用迁移到 anyweb CLI 原子命令；MCP 配置从 ucal 切换到 anyweb；新增 Section 3.3 迁移对比表 |
 | 2026-03-21 | kb, feishu | **飞书发布流程重构**: kb 新增 Section 1.6 完整发布链路(新建/更新判断 + 预处理 + 导入 + Mermaid转图片必须执行)；feishu 图片上传改为 tenant_token 优先(此前错误记录为必须UAT) |
 | 2026-03-21 | ARCHITECTURE.md | **初始创建**: 扫描全部 24 个 skill，建立架构全景、工作流地图、索引表 |

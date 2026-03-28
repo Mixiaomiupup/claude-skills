@@ -8,7 +8,8 @@ description: Use when user mentions server, deployment, remote access, SSH, or n
 | Machine | Role | Access |
 | ------- | ---- | ------ |
 | Aliyun 轻量服务器 | Web hosting, frps relay | `ssh root@YOUR_SERVER_IP` |
-| 个人PC | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
+| 个人PC (Ubuntu) | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
+| 个人PC (Windows) | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` (via frp) |
 
 ---
 
@@ -110,7 +111,7 @@ location /新项目/ {
 - Accessible within mainland China (no GFW issues)
 - Web server: nginx (static + reverse proxy)
 - 1GB swap configured (vm.swappiness=10)
-- UFW firewall: 22, 80, 443, 6000, 7000, 7500 exposed
+- UFW firewall: 22, 80, 443, 6000, 6001, 7000, 7500 exposed
 - Add new projects to the "Deployed Projects" table above
 
 ### frp Server (frps)
@@ -212,3 +213,44 @@ sudo systemctl status frpc
 - frpc 断线需重连，配置为 systemd 服务开机自启
 - 比 Aliyun 2C2G 性能强很多，适合跑 Chrome 采集、数据处理等任务
 - **已安装**: gh, python3, chrome, chromedriver, sqlite3(未安装)
+
+---
+
+# 3. 个人PC - Windows (via frp)
+
+无公网 IP 的内网 Windows 机器，通过 frp 穿透访问。
+
+## Connection
+
+| Field    | Value                                                |
+| -------- | ---------------------------------------------------- |
+| SSH      | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` |
+| 穿透方式 | frpc → Aliyun frps (port 7000) → port 6001          |
+| User     | `huazhi1`                                            |
+| Password | `huazhi1`                                            |
+
+## Specs
+
+| Item     | Detail                                    |
+| -------- | ----------------------------------------- |
+| Hostname | HUAZHI1                                   |
+| OS       | Windows 11 专业版 (Build 26200)            |
+| CPU      | AMD (Family 26 Model 36) ~2000 MHz        |
+| Memory   | 30 GiB                                    |
+| Role     | 待定                                      |
+
+## Common Operations
+
+```bash
+# SSH connect (via frp tunnel)
+sshpass -p 'huazhi1' ssh -p 6001 -o StrictHostKeyChecking=no huazhi1@YOUR_SERVER_IP
+
+# Run PowerShell command
+sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP "powershell -Command 'Get-Process'"
+```
+
+## Notes
+
+- 默认 shell 是 CMD，如需 PowerShell 需加 `powershell -Command '...'`
+- frpc 配置: `C:\frp\frpc.toml`，remotePort = 6001
+- 无公网 IP，依赖 frp 穿透

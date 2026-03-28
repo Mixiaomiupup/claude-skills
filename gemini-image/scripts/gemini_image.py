@@ -28,7 +28,7 @@ SERVICE_ACCOUNT_FILE = os.path.expanduser(
 )
 PROJECT = "uxfv3f-ogqz"
 LOCATION = "us-central1"
-IMAGE_GEN_MODEL = "gemini-2.0-flash-preview-image-generation"
+IMAGE_GEN_MODEL = "gemini-2.5-flash-image"
 IMAGE_UNDERSTAND_MODEL = "gemini-2.5-flash"
 
 

@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import time
+from pathlib import Path
 
 
 def _curl_json(args):
@@ -62,6 +63,11 @@ def _preprocess_markdown(md_path):
     content = re.sub(r"!\[\[.*?\]\]", "", content)
     # Convert [[wikilink]] to plain text
     content = re.sub(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]", lambda m: m.group(2) or m.group(1), content)
+    # Merge indented blockquotes under bullets into the bullet text.
+    # Pattern: "  > text" (indented blockquote) → "  text" (bullet continuation).
+    # This keeps title + description in one Feishu bullet block instead of splitting.
+    # Only targets indented "> " (under bullets), not standalone "> " (top-level quotes).
+    content = re.sub(r"^(  +)> ", r"\1", content, flags=re.MULTILINE)
 
     return content
 
@@ -273,12 +279,330 @@ def _update_existing_doc(token, content, doc_title, node_token):
     return old_doc_token
 
 
+def _upload_image(token, image_path):
+    """Upload an image to Feishu and return the image_key."""
+    fsize = os.path.getsize(image_path)
+    resp = _curl_json(
+        [
+            "-X", "POST",
+            "https://open.feishu.cn/open-apis/im/v1/images",
+            "-H", f"Authorization: Bearer {token}",
+            "-F", "image_type=message",
+            "-F", f"image=@{image_path}",
+        ]
+    )
+    if resp.get("code") != 0:
+        print(f"[feishu] Warning: image upload failed: {resp.get('msg')}")
+        return None
+    return resp["data"]["image_key"]
+
+
+def _upload_drive_image(token, image_path, parent_node):
+    """Upload an image to Feishu Drive and return file_token for docx embedding."""
+    fsize = os.path.getsize(image_path)
+    filename = os.path.basename(image_path)
+    resp = _curl_json(
+        [
+            "-X", "POST",
+            "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all",
+            "-H", f"Authorization: Bearer {token}",
+            "-F", f"file_name={filename}",
+            "-F", "parent_type=docx_image",
+            "-F", f"parent_node={parent_node}",
+            "-F", f"size={fsize}",
+            "-F", f"file=@{image_path}",
+        ]
+    )
+    if resp.get("code") != 0:
+        print(f"[feishu] Warning: drive image upload failed: {resp.get('msg')}")
+        return None
+    return resp["data"]["file_token"]
+
+
+def _insert_image_block(token, doc_token, parent_block_id, image_path, index=-1):
+    """Insert an image into a Feishu document using the 3-step method.
+
+    Feishu image blocks (block_type 27) must be created empty first, then the
+    image is uploaded with parent_node=image_block_id, then PATCHed in.
+
+    Args:
+        token: Feishu tenant access token.
+        doc_token: Target document token.
+        parent_block_id: Parent block (usually page block) to insert under.
+        image_path: Local path to the image file.
+        index: Position index (-1 for end).
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    # Step 1: Create empty image block
+    resp = _curl_json(
+        [
+            "-X", "POST",
+            f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+            f"/blocks/{parent_block_id}/children",
+            "-H", f"Authorization: Bearer {token}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({
+                "children": [{"block_type": 27, "image": {}}],
+                "index": index,
+            }),
+        ]
+    )
+    if resp.get("code") != 0:
+        print(f"[feishu] Warning: create empty image block failed: {resp.get('msg')}")
+        return False
+    image_block_id = resp["data"]["children"][0]["block_id"]
+
+    # Step 2: Upload image with parent_node = image_block_id (NOT doc_token!)
+    fsize = os.path.getsize(image_path)
+    filename = os.path.basename(image_path)
+    resp2 = _curl_json(
+        [
+            "-X", "POST",
+            "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all",
+            "-H", f"Authorization: Bearer {token}",
+            "-F", f"file_name={filename}",
+            "-F", "parent_type=docx_image",
+            "-F", f"parent_node={image_block_id}",
+            "-F", f"size={fsize}",
+            "-F", f"file=@{image_path}",
+        ]
+    )
+    if resp2.get("code") != 0:
+        print(f"[feishu] Warning: image upload failed: {resp2.get('msg')}")
+        return False
+    file_token = resp2["data"]["file_token"]
+
+    # Step 3: PATCH replace_image
+    resp3 = _curl_json(
+        [
+            "-X", "PATCH",
+            f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+            f"/blocks/{image_block_id}",
+            "-H", f"Authorization: Bearer {token}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({"replace_image": {"token": file_token}}),
+        ]
+    )
+    if resp3.get("code") != 0:
+        print(f"[feishu] Warning: replace_image failed: {resp3.get('msg')}")
+        return False
+    return True
+
+
+def insert_images_to_doc(token, doc_token, media_dir, tweet_block_map=None):
+    """Insert images into a Feishu document using the 3-step method.
+
+    Args:
+        token: Feishu tenant access token.
+        doc_token: Target document token.
+        media_dir: Directory containing screenshot files (tweet-{id}.png).
+        tweet_block_map: Optional dict mapping tweet_id to block_id for positioning.
+            If None, images are appended to the end of the document.
+
+    Returns:
+        Number of images successfully inserted.
+    """
+    media_path = Path(media_dir)
+    if not media_path.exists():
+        return 0
+
+    blocks = _list_all_blocks(token, doc_token)
+    page_block_id = blocks[0]["block_id"]
+    inserted = 0
+
+    # Build a map of block text content -> block_id for positioning
+    # Search ALL text-bearing keys including bullet/ordered lists
+    block_text_map = {}
+    text_keys = ("text", "heading1", "heading2", "heading3", "heading4",
+                 "heading5", "heading6", "heading7", "heading8", "heading9",
+                 "quote", "bullet", "ordered", "callout")
+    for block in blocks:
+        text_content = ""
+        for key in text_keys:
+            elem = block.get(key, {})
+            for el in elem.get("elements", []):
+                tc = el.get("text_run", {}).get("content", "")
+                text_content += tc
+                link = el.get("text_run", {}).get("text_element_style", {}).get("link", {})
+                if link.get("url"):
+                    import urllib.parse
+                    text_content += urllib.parse.unquote(link["url"])
+        if text_content:
+            block_text_map[block["block_id"]] = text_content
+
+    # Insert cover image first (at top of document)
+    cover_path = media_path / "cover.png"
+    if cover_path.exists():
+        if _insert_image_block(token, doc_token, page_block_id, str(cover_path), index=1):
+            inserted += 1
+            print(f"[feishu] Inserted cover image")
+        else:
+            print(f"[feishu] Warning: cover insert failed")
+        time.sleep(0.3)
+
+    # Insert tweet screenshots
+    for img_file in sorted(media_path.glob("tweet-*.png")):
+        tweet_id = img_file.stem.replace("tweet-", "")
+
+        # Find the block containing this tweet's URL
+        target_index = -1
+        for bid, text in block_text_map.items():
+            if tweet_id in text:
+                current_blocks = _list_all_blocks(token, doc_token)
+                current_children = current_blocks[0].get("children", [])
+                try:
+                    idx = current_children.index(bid)
+                    target_index = idx + 1
+                except ValueError:
+                    pass
+                break
+
+        if _insert_image_block(token, doc_token, page_block_id, str(img_file), index=target_index):
+            inserted += 1
+            print(f"[feishu] Inserted screenshot: {img_file.name}")
+        else:
+            print(f"[feishu] Warning: screenshot insert failed for {img_file.name}")
+        time.sleep(0.3)
+
+    return inserted
+
+
+def insert_videos_to_doc(token, doc_token, media_dir):
+    """Insert videos into a Feishu document using the 3-step file block method.
+
+    Args:
+        token: Feishu tenant access token.
+        doc_token: Target document token.
+        media_dir: Directory containing video files (tweet-{id}.mp4).
+
+    Returns:
+        Number of videos successfully inserted.
+    """
+    media_path = Path(media_dir)
+    if not media_path.exists():
+        return 0
+
+    blocks = _list_all_blocks(token, doc_token)
+    page_block_id = blocks[0]["block_id"]
+
+    # Build text map including URLs for tweet ID matching
+    block_text_map = {}
+    text_keys = ("text", "heading1", "heading2", "heading3", "heading4",
+                 "heading5", "heading6", "heading7", "heading8", "heading9",
+                 "quote", "bullet", "ordered", "callout")
+    for block in blocks:
+        text_content = ""
+        for key in text_keys:
+            elem = block.get(key, {})
+            for el in elem.get("elements", []):
+                tc = el.get("text_run", {}).get("content", "")
+                text_content += tc
+                link = el.get("text_run", {}).get("text_element_style", {}).get("link", {})
+                if link.get("url"):
+                    import urllib.parse
+                    text_content += urllib.parse.unquote(link["url"])
+        if text_content:
+            block_text_map[block["block_id"]] = text_content
+
+    inserted = 0
+    for video_file in sorted(media_path.glob("tweet-*.mp4")):
+        tweet_id = video_file.stem.replace("tweet-", "")
+        fsize = os.path.getsize(str(video_file))
+        filename = video_file.name
+
+        # Find the block containing this tweet's URL for positioning
+        target_index = -1
+        for bid, text in block_text_map.items():
+            if tweet_id in text:
+                current_blocks = _list_all_blocks(token, doc_token)
+                current_children = current_blocks[0].get("children", [])
+                try:
+                    idx = current_children.index(bid)
+                    target_index = idx + 1
+                    print(f"[feishu] Video {tweet_id}: inserting at index {target_index}")
+                except ValueError:
+                    pass
+                break
+
+        # Step 1: Create empty file block
+        resp = _curl_json(
+            [
+                "-X", "POST",
+                f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+                f"/blocks/{page_block_id}/children",
+                "-H", f"Authorization: Bearer {token}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"children": [{"block_type": 23, "file": {}}], "index": target_index}),
+            ]
+        )
+        if resp.get("code") != 0:
+            print(f"[feishu] Warning: file block creation failed: {resp.get('msg')}")
+            continue
+        created_block_id = resp["data"]["children"][0]["block_id"]
+
+        # The created block may be wrapped in a View block (type 33).
+        # We need the actual file block (type 23) which is its child.
+        time.sleep(0.5)
+        block_resp = _curl_json(
+            [
+                f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+                f"/blocks/{created_block_id}",
+                "-H", f"Authorization: Bearer {token}",
+            ]
+        )
+        block_data = block_resp.get("data", {}).get("block", {})
+        if block_data.get("block_type") == 33 and block_data.get("children"):
+            file_block_id = block_data["children"][0]
+        else:
+            file_block_id = created_block_id
+
+        # Step 2: Upload video with parent_node = file_block_id
+        resp = _curl_json(
+            [
+                "-X", "POST",
+                "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all",
+                "-H", f"Authorization: Bearer {token}",
+                "-F", f"file_name={filename}",
+                "-F", "parent_type=docx_file",
+                "-F", f"parent_node={file_block_id}",
+                "-F", f"size={fsize}",
+                "-F", f"file=@{str(video_file)}",
+            ]
+        )
+        if resp.get("code") != 0:
+            print(f"[feishu] Warning: video upload failed: {resp.get('msg')}")
+            continue
+        media_token = resp["data"]["file_token"]
+
+        # Step 3: PATCH replace_file
+        resp = _curl_json(
+            [
+                "-X", "PATCH",
+                f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+                f"/blocks/{file_block_id}",
+                "-H", f"Authorization: Bearer {token}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"replace_file": {"token": media_token}}),
+            ]
+        )
+        if resp.get("code") == 0:
+            inserted += 1
+            print(f"[feishu] Inserted video: {video_file.name}")
+        else:
+            print(f"[feishu] Warning: video replace failed: {resp.get('msg')}")
+        time.sleep(0.2)
+
+    return inserted
+
+
 WIKI_SPACE_ID = "7559794508562251778"
 
 
 def _move_to_wiki(token, doc_token, parent_node_token):
     """Move document into wiki knowledge base."""
-    _curl_json(
+    move_resp = _curl_json(
         [
             "-X", "POST",
             f"https://open.feishu.cn/open-apis/wiki/v2/spaces/{WIKI_SPACE_ID}/nodes/move_docs_to_wiki",
@@ -291,6 +615,10 @@ def _move_to_wiki(token, doc_token, parent_node_token):
             }),
         ]
     )
+    if move_resp.get("code") != 0:
+        raise RuntimeError(
+            f"[feishu] Failed to move doc to wiki: {move_resp.get('code')} - {move_resp.get('msg')}"
+        )
 
     # Wait for async move to complete, then get node_token
     time.sleep(3)
@@ -300,6 +628,10 @@ def _move_to_wiki(token, doc_token, parent_node_token):
             "-H", f"Authorization: Bearer {token}",
         ]
     )
+    if "data" not in resp:
+        raise RuntimeError(
+            f"[feishu] Failed to get wiki node after move: {resp.get('code')} - {resp.get('msg')}"
+        )
     return resp["data"]["node"]["node_token"]
 
 
@@ -383,6 +715,7 @@ def publish_to_feishu(
     card_title="Daily Digest",
     card_summary="",
     recipients="all",
+    media_dir=None,
 ):
     """Publish markdown to Feishu wiki and broadcast card to users.
 
@@ -394,9 +727,10 @@ def publish_to_feishu(
         card_title: Card header title text.
         card_summary: Lark markdown content for card body.
         recipients: 'all' for all users, or list of names.
+        media_dir: Optional path to directory with cover.png, tweet-*.png, tweet-*.mp4.
 
     Returns:
-        dict with doc_token, node_token, doc_url, sent_count.
+        dict with doc_token, node_token, doc_url, sent_count, images_inserted, videos_inserted.
     """
     # 1. Get credentials and token
     app_id, app_secret = _get_feishu_credentials()
@@ -427,6 +761,21 @@ def publish_to_feishu(
         node_token = _move_to_wiki(token, doc_token, wiki_parent_node)
         doc_url = f"https://huazhi-ai.feishu.cn/docx/{doc_token}"
         print(f"[feishu] Moved to wiki: {doc_url}")
+
+    # 4.5 Insert media (images + videos) if media_dir provided
+    images_inserted = 0
+    videos_inserted = 0
+    if media_dir:
+        media_dir_expanded = os.path.expanduser(media_dir)
+        if os.path.isdir(media_dir_expanded):
+            try:
+                images_inserted = insert_images_to_doc(token, doc_token, media_dir_expanded)
+                videos_inserted = insert_videos_to_doc(token, doc_token, media_dir_expanded)
+                print(f"[feishu] Media: {images_inserted} images, {videos_inserted} videos inserted")
+            except Exception as e:
+                print(f"[feishu] Warning: media insertion failed: {e}")
+        else:
+            print(f"[feishu] Warning: media_dir not found: {media_dir_expanded}")
 
     # 5. Build card
     card = {
@@ -493,4 +842,6 @@ def publish_to_feishu(
         "doc_url": doc_url,
         "sent_count": sent,
         "total_users": len(target_users),
+        "images_inserted": images_inserted,
+        "videos_inserted": videos_inserted,
     }

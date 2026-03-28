@@ -2,37 +2,142 @@
 # digest mode prioritizes these accounts' tweets
 # Edit freely to add/remove accounts
 
+# === AI 公司官方 ===
+ai_company:
+  - AnthropicAI
+  - OpenAI
+  - GoogleDeepMind
+  - AIatMeta          # AI at Meta / FAIR
+  - cursor_ai
+  - MiniMax_AI        # MiniMax 官方
+  - MiniMaxAgent      # MiniMax Agent
+  - openclaw
+  - deepseek_ai       # DeepSeek
+  - Alibaba_Qwen      # 通义千问/Qwen
+  - 01AI_Yi           # 零一万物/Yi
+  - StepFun_ai        # 阶跃星辰
+
+# === AI 一线工程师/PM ===
+ai_frontline:
+  - trq212            # Anthropic, Claude Code
+  - _catwu            # Anthropic, Cowork PM
+  - dpkingma          # Anthropic, VAE/Adam 发明者
+  - OfficialLoganK    # Google, AI Studio + Gemini API
+  - ryolu_            # Cursor 设计
+  - amanrsanger       # Cursor 联合创始人
+  - srush_nlp         # Cursor 研究员, post-training/RL
+  - sea_snell         # Cursor 研究员, PhD Berkeley, ex-DeepMind
+  - rohinmshah        # DeepMind, AGI Safety
+  - pfau              # DeepMind Staff 研究科学家, AI for Science
+  - bousmalis         # DeepMind 研究科学家, 机器人学习
+  - M_R_Samsami       # DeepMind RL 工程师, Genie 世界模型
+  - _jasonwei         # OpenAI (前 Google), 研究员
+  - danintheory       # OpenAI, 深度学习理论
+  - aidan_mclau       # OpenAI 研究科学家
+
+# === AI Agent/编程工具 ===
+ai_agent:
+  - steipete          # OpenClaw 创建者, 现 OpenAI
+  - rauchg            # Vercel/v0 CEO
+  - scottwu46         # Cognition/Devin CEO
+  - joaomdmoura       # CrewAI 创始人, 多 Agent 编排
+  - jbfja             # Cursor 工程师, Supermaven 创始人, ex-OpenAI
+
+# === AI 研究/领袖 ===
 ai_research:
   - karpathy
   - ylecun
   - sama
-  - AnthropicAI
-  - OpenAI
 
-ai_products:
-  - trq212
-  - bcherny
-  - ryolu_
-  - cursor_ai
-  - dotey
+# === 开源 AI 工具作者 ===
+oss_creators:
+  - simonw            # Datasette, LLM 工具链
+  - jxnlco            # Jason Liu, Instructor
+  - HamelHusain       # AI evals, LLM 工程
+  - hwchase17         # Harrison Chase, LangChain
+  - jerryjliu0        # Jerry Liu, LlamaIndex
+  - ggerganov         # llama.cpp
 
-indie_dev:
-  - lxfater
+# === 具身智能/机器人 — 公司 ===
+robotics_company:
+  - NVIDIARobotics    # NVIDIA 机器人官方
+  - Figure_robot      # Figure AI 官方
+  - BostonDynamics    # Boston Dynamics 官方
+  - Apptronik         # Apptronik 官方
+  - Tesla_Optimus     # Tesla Optimus 官方
+  - LimX_Dynamics     # 灵犀动力
+  - UnitreeRobotics   # 宇树科技
+  - AGIBOTofficial    # 智元机器人
+  - FourierRobots     # 傅利叶智能
+  - GalbotRobotics    # 银河通用
+  - UBTECHRobotics    # 优必选
+
+# === 具身智能/机器人 — 明星开发者 ===
+robotics_dev:
+  - DrJimFan          # NVIDIA, 具身 AI 研究
+  - svlevine          # UC Berkeley, Physical Intelligence 联创
+  - chelseabfinn      # Stanford 教授, Physical Intelligence 联创, VLA
+  - pabbeel           # UC Berkeley 教授, Covariant, 机器人学习
+  - adcock_brett      # Figure AI CEO
+  - ancadianadragan   # UC Berkeley, DeepMind Robotics, 安全+机器人
+  - GuanyaShi         # CMU 机器人教授, 灵敏机器人
+  - SongShuran        # Stanford 机器人教授, 操作/视觉
+  - UmarIqb           # NVIDIA 机器人 AI 高级经理, SOMA/GEM 开源
+  - zhengyiluo        # NVIDIA GEAR 研究员, 具身 AI
+  - AjayMandlekar     # Stanford/Berkeley, DexMachina, 灵巧操作
+  - junfanzhu98       # Stanford/GaTech, sim-to-real, VLA 架构
+  - yukez             # 人形操作研究, MimicDroid
+  - jimmyyhwu         # 机器人基础模型, ACT-1
+  - TairanHe99        # CMU 机器人博士, NVIDIA 实习
+  - yilun_chen_       # Tesla Optimus, 机器人基础模型
+  - mohith_dzn        # Physical Intelligence 创始成员, π0 VLA
+  - tarikkelestemur   # 前 Covariant, 接触操作/轨迹优化
+  - Zhikai273         # 清华 IIIS 博士, Galbot, LATENT 项目
+  - kaiwynd           # Columbia 博士, 操作/模仿学习
+  - JiankaiSun        # Stanford 博士, 具身世界模型
+  - Yuanhang__Zhang   # CMU 机器人 + Amazon FAR, 人形运动
+  - fancy_yzc         # 清华 IIIS 博士, RL/灵巧手/sim2real
+  - wenlong_huang     # Stanford 博士, 机器人基础模型
+  - hausman_k         # DeepMind 机器人研究
+  - ericjang11        # 前 Google Brain 机器人
+
+# === 中文开发者/KOL ===
+cn_dev:
+  - dotey             # 宝玉, baoyu-skills
+  - HiTw93            # Tw93, Pake/MiaoYan 作者
+  - lxfater           # 铁锤人, 开源大户
+  - iamzhihui         # 志辉, 架构师转 AI
+  - bourneliu66       # 刘小排, Raphael/AnyVoice
+  - Tumeng05          # 土猛的员外, TorchV
+  - Gorden_Sun        # AI 资讯日报 (日更 3 年)
+  - xicilion          # 响马, fibjs 作者
+  - lifesinger        # 玉伯, 前蚂蚁体验技术部
+  - yanhua1010        # AI solopreneur
+  - LongChenNotes     # AI 长期主义
+  - idoubicc          # idoubi, 前腾讯/微信, WeClaw
+
+# === 独立开发者/创业 ===
+indie:
   - Leobai825
-  - yanhua1010
   - wquguru
   - BrettFromDJ
+  - ZixuanLi_         # z.ai
 
-tech_thought:
-  - karpathy
-  - thedankoe
-  - LongChenNotes
-  - frxiaobei
+# === 信息聚合 ===
+aggregator:
+  - GitHub_Daily      # 中文 GitHub 热门
+  - _akhaliq          # AK, 论文/模型速报
 
-# Seed accounts for discover mode cross-analysis
+# === Seed（discover mode 种子）===
 discover_seeds:
   - sama
   - karpathy
   - AnthropicAI
   - trq212
   - dotey
+  - DrJimFan
+  - cursor_ai
+  - simonw
+  - deepseek_ai
+  - chelseabfinn      # 具身 AI 种子
+  - steipete          # Agent 生态种子

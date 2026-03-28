@@ -472,6 +472,16 @@ kb sync 模式调用 feishu skill 做双向同步。
 
 每个 skill 只做一件事，article-gen 负责串联。
 
+## 内容格式规则
+
+| 内容 | 格式 | 禁止 |
+|------|------|------|
+| **流程图/架构图** | Mermaid (`\`\`\`mermaid`) | ASCII art（箭头、方框字符画） |
+| **PPT/幻灯片** | Marp (Markdown slides) | 其他 PPT 方案 |
+| **飞书文档更新** | Block API 原地修改 | 删除重建（没有删除权限） |
+
+**Mermaid 发布到飞书注意**：飞书不渲染 Mermaid，导入前用 `mmdc -w 1460 -b white --scale 2` 转 PNG，导入后替换代码块为图片。详见 feishu skill「Mermaid 图表发布到飞书」。
+
 ## 执行检查清单
 
 每篇文章完成后，逐项自检：
@@ -484,3 +494,4 @@ kb sync 模式调用 feishu skill 做双向同步。
 - [ ] **Step 3**: 不是在末尾追加翻译，而是整体重组了文件
 - [ ] **Step 3**: 翻译和原文两部分都包含了原文中的内联图片
 - [ ] **Step 5**: 飞书发布后已回写 `feishu_node_token` 和 `feishu_sync_time`
+- [ ] **格式**: 流程图用 Mermaid，不是 ASCII art
