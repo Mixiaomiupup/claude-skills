@@ -104,12 +104,20 @@ curl -s -X POST "https://mp.weixin.qq.com/cgi-bin/filetransfer?action=upload_mat
 
 在文章编辑器中点击工具栏的"视频"按钮，弹出"选择视频"对话框，点击"本地上传"会打开一个**新标签页**（`videomsg_edit`）。
 
-```javascript
-// 点击工具栏视频按钮
-document.querySelector('.tpl_item.jsInsertIcon.video').click();
+**注意**：headless 环境下 `window.open` 可能被拦截。用拦截器捕获 URL 后手动导航：
 
-// 在弹出的对话框中点击"本地上传"
-// 注意：这会打开新标签页，不是在当前页面内操作
+```javascript
+// 1. 拦截 window.open
+window.__capturedUrl = null;
+window._origOpen = window.open;
+window.open = function(url) { window.__capturedUrl = url; return null; };
+
+// 2. 点击"本地上传"
+document.querySelector('.tpl_item.jsInsertIcon.video').click();
+// 等待对话框出现后点击"本地上传"按钮
+
+// 3. 读取捕获的 URL，手动在新 tab 打开
+// window.__capturedUrl → 包含 videomsg_edit 的 URL
 ```
 
 ### 4b.3 在视频上传页注入文件
@@ -139,11 +147,13 @@ await ws.send(json.dumps({'id':2,'method':'DOM.setFileInputFiles','params':{
 
 上传完成后（轮询 `.weui-desktop-upload__file__progress` 的 `style.width` 到 `100%`）：
 
-1. **选封面**：点击推荐封面缩略图（`.cover__options__item`，跳过第一个空白项），会弹出封面编辑器
+1. **选封面**：**必须等待封面缩略图加载**（至少 15 秒），然后点击推荐封面缩略图（`.cover__options__item`，跳过第一个空白项）。如果缩略图未加载就点击会导致保存失败。**用重试循环**：最多 5 次，每次间隔 5 秒。
 2. **完成裁剪**：在封面编辑器中直接点击"完成"按钮
 3. **填标题**：设置 `input[name=title]` 的值（使用 `HTMLInputElement.prototype.value.set` + dispatch input 事件）
 4. **勾选同意**：点击"我已阅读并同意"checkbox
 5. **保存**：点击"保存"按钮，页面跳转到视频素材列表表示成功
+
+**视频审核/转码**：上传保存后视频进入"转码中"→"审核中"状态。**审核通过前无法插入文章**。轮询素材库列表，只使用状态为"已通过"的视频。未通过的跳过，不要阻塞发布流程。
 
 ### 4b.5 在文章中插入已上传的视频
 
@@ -164,19 +174,31 @@ checkLabel.click();
 // 4. 点击确定插入
 ```
 
-### 4b.6 调整视频位置
+### 4b.6 视频位置：Marker 技术（推荐）
 
-视频默认插入到光标位置（通常是文章开头）。需要通过 ProseMirror DOM 移动：
+视频默认插入到光标位置。用 **marker 占位符**精确控制视频应出现的位置：
 
-```javascript
-var pm = document.querySelector(".ProseMirror");
-var videoSection = pm.querySelector("section[nodeleaf]"); // 视频元素
-var targetImg = pm.querySelector("img[src*='目标图片URL片段']");
-var imgSection = targetImg.parentElement; // 找到包含目标图片的 section
-imgSection.parentNode.insertBefore(videoSection, imgSection.nextSibling);
+**Step 1**：在 HTML 中为每个视频插入唯一占位符（在创建草稿前）：
+
+```python
+def video_marker(name):
+    return f'<p style="text-align:center;margin:12px 0;padding:16px;background-color:#f0f0f0;border-radius:8px;font-size:14px;color:#666;">🎬 [{name}] 视频位置</p>'
 ```
 
-**注意**：编辑器是 ProseMirror（不是 UEditor），内容在 `.ProseMirror` 元素中，不在 iframe 里。`UE.instants` 为空。
+把 marker 放在对应新闻条目的来源链接之后。**注意**：不要用 `id` 属性，API 创建草稿时会被 strip。
+
+**Step 2**：草稿创建后，按顺序处理每个视频：
+1. 在 ProseMirror 中找到 marker 文本：`textContent.includes('[BD] 视频位置')`
+2. 将光标设置到 marker 元素：`window.getSelection().collapse(markerNode, 0)`
+3. 打开视频对话框，选中对应视频，插入 → 视频出现在光标位置（即 marker 旁边）
+4. 删除 marker 元素
+
+**Step 3**：验证所有视频已正确放置。
+
+**注意**：
+- 编辑器是 ProseMirror（不是 UEditor），内容在 `.ProseMirror` 元素中，不在 iframe 里
+- 每次只插入一个视频，按 marker 顺序逐个处理
+- 如果视频还在审核中，跳过对应 marker（留白或删除 marker）
 
 ### 4b.7 视频上传约束
 
@@ -223,6 +245,9 @@ https://x.com/example/status/123456
 | **图片必须用 CDN URL** | 只有 `mmbiz.qpic.cn` 域名的图片才显示 |
 | **图片加 max-width:100%** | 防止图片溢出手机屏幕 |
 | **不要用 text-align:justify** | 移动端会导致字间距异常放大 |
+| **有视频不截图** | 推文已有视频下载的，跳过该推文截图，视频比截图更有信息量 |
+| **视频用 marker 定位** | HTML 中在对应位置放占位符，插入视频前设置光标到 marker 处（见 4b.6） |
+| **不加数据来源 footer** | 文章末尾不要放"数据来源: Grok Search..."等 meta 信息 |
 
 ### 5.3 深色模式（可选）
 
@@ -288,20 +313,41 @@ result = json.loads(resp.read())
 
 3. 等待确认对话框，点击对话框内的"发表"主按钮（`.primary` class）
 
-4. 可能出现第二个确认框（"继续发表"），同样点击确认
+4. 可能出现第二个确认框（"继续发表"）— **常规 `.click()` 和 CDP 鼠标事件对此按钮无效**，必须通过 React 内部 onClick：
+
+```javascript
+const primaryBtn = /* 找到 .primary 按钮 */;
+const propsKey = Object.keys(primaryBtn).find(k => k.startsWith('__reactProps'));
+if (propsKey && primaryBtn[propsKey].onClick) {
+    primaryBtn[propsKey].onClick({
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        nativeEvent: new MouseEvent('click'),
+        target: primaryBtn, currentTarget: primaryBtn
+    });
+}
+```
 
 5. **用户扫码验证** — 提示用户扫码，等待完成
 
 ### 7.2 查找对话框按钮的模式
 
 ```javascript
+// 优先用 React onClick，fallback 到 .click()
 const dialogs = document.querySelectorAll('.weui-desktop-dialog__wrp');
 for (let d of dialogs) {
     if (d.offsetHeight > 0) {
         const btns = d.querySelectorAll('button');
         for (let b of btns) {
             if (b.className.includes('primary') && b.offsetHeight > 0) {
-                b.click(); break;
+                const rk = Object.keys(b).find(k => k.startsWith('__reactProps'));
+                if (rk && b[rk].onClick) {
+                    b[rk].onClick({preventDefault:()=>{},stopPropagation:()=>{},
+                        nativeEvent:new MouseEvent('click'),target:b,currentTarget:b});
+                } else {
+                    b.click();
+                }
+                break;
             }
         }
     }
@@ -310,11 +356,28 @@ for (let d of dialogs) {
 
 ## 8. 修改已发表文章
 
+### 8.1 限制
+
 - 每篇最多修改 **3 次**
-- 入口：发表记录页面 → hover 文章行右侧 → "改"按钮（需 CDP `Input.dispatchMouseEvent` 模拟 hover）
-- **只能修改文字内容，不能修改 CSS 样式**
-- 微信通过内部状态追踪修改，直接改 DOM 无效（提示"检测到内容没有修改"）
-- 需要改样式 → 删除已发表文章后重新发布新草稿
+- 支持修改：标题、正文文字、图片、视频、封面及摘要
+- **不能修改 CSS 样式**（需要改样式 → 删除后重新发布）
+- 修改页面用 **UEditor**（不是 ProseMirror），且是**逐元素操作**：点击某段落/图片弹出"替换"/"删除"选项
+- 直接改 DOM 无效（微信内部状态追踪）
+
+### 8.2 入口
+
+发表记录页面 → hover 文章行 → 右侧出现3个按钮：统计(图表icon) / **改**(文字) / 更多(...)
+
+```
+URL: /cgi-bin/appmsgpublish?sub=list&...
+hover 后 "改" 按钮位于行右侧中间位置（3个按钮中第2个）
+点击后跳转: /cgi-bin/masssendmodify?action=edit_new&appmsgid=XXX&...
+```
+
+### 8.3 适用场景
+
+- 修改错别字、更新数据 → 适合用修改
+- 大面积内容替换（加截图、加视频、改排版）→ **不适合**，应删除后重新发布
 
 ## 9. 常见问题
 
@@ -327,3 +390,7 @@ for (let d of dialogs) {
 | API 发布返回 ret=2 | 需要扫码验证 | 通过 CDP 页面操作发布 |
 | Playwright 页面空白 | 微信检测自动化浏览器 | 用系统 Chrome + CDP |
 | JS 变量名冲突 | CDP 多次执行同一页面 | 用 IIFE 包裹 |
+| 视频全堆在文章开头/末尾 | 未用 marker 定位，视频插入到默认光标位置 | 用 marker 占位符技术（见 4b.6） |
+| 视频封面选不了 | 缩略图未加载就点击 | 等 15 秒 + 重试循环（见 4b.4） |
+| "继续发表"按钮点不动 | React 组件拦截了原生事件 | 用 `__reactProps` 调 onClick（见 7.1） |
+| 视频"暂无" | 刚上传还在转码/审核 | 等待审核通过，跳过未通过的 |

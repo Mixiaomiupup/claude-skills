@@ -26,7 +26,7 @@ description: 同步云效（Yunxiao）项目迭代进展到飞书多维表格（
 
 ```
 ToolSearch("select:mcp__yunxiao__search_projects,mcp__yunxiao__list_sprints,mcp__yunxiao__search_workitems")
-ToolSearch("select:mcp__lark-mcp__wiki_v2_spaceNode_list,mcp__lark-mcp__docx_v1_document_rawContent,mcp__lark-mcp__bitable_v1_appTable_list,mcp__lark-mcp__bitable_v1_appTableField_list,mcp__lark-mcp__bitable_v1_appTableRecord_search,mcp__lark-mcp__bitable_v1_appTableRecord_batchCreate,mcp__lark-mcp__bitable_v1_appTableRecord_batchUpdate")
+# 飞书操作统一用 lark-cli api（不再依赖 lark-mcp）
 ```
 
 ## Step 2: 解析同步目标
@@ -100,10 +100,9 @@ mcp__yunxiao__search_workitems
 如果项目在别名表中有飞书 wiki 位置，直接按路径查找。否则：
 
 1. 列出产品研发知识库顶级节点：
-   ```
-   mcp__lark-mcp__wiki_v2_spaceNode_list
-     path: { space_id: "7559794508562251778" }
-     params: { page_size: 50 }
+   ```bash
+   lark-cli api GET /open-apis/wiki/v2/spaces/7559794508562251778/nodes --as bot \
+     --params '{"page_size":50}'
    ```
 
 2. 逐层展开，查找包含项目名的节点
@@ -112,21 +111,17 @@ mcp__yunxiao__search_workitems
 
 ### 4.2 获取 bitable 结构
 
-```
-mcp__lark-mcp__bitable_v1_appTable_list
-  path: { app_token: "<bitable的obj_token>" }
+```bash
+lark-cli api GET /open-apis/bitable/v1/apps/<app_token>/tables --as bot
 
-mcp__lark-mcp__bitable_v1_appTableField_list
-  path: { app_token: "<app_token>", table_id: "<table_id>" }
+lark-cli api GET /open-apis/bitable/v1/apps/<app_token>/tables/<table_id>/fields --as bot
 ```
 
 ### 4.3 读取现有记录（去重用）
 
-```
-mcp__lark-mcp__bitable_v1_appTableRecord_search
-  path: { app_token: "<app_token>", table_id: "<table_id>" }
-  data: { automatic_fields: true }
-  params: { page_size: 500 }
+```bash
+lark-cli api POST /open-apis/bitable/v1/apps/<app_token>/tables/<table_id>/records/search --as bot \
+  --params '{"page_size":500}' --data '{"automatic_fields":true}'
 ```
 
 对比云效工作项编号与现有记录标题中的编号，判断哪些是新增、哪些需要更新。
@@ -143,34 +138,17 @@ mcp__lark-mcp__bitable_v1_appTableRecord_search
 
 对于现有记录中没有的用户，通过部门成员 API 查找：
 
-```python
-import json, os, urllib.request
+```bash
+# 获取 token（lark-cli 自动管理认证，直接用 lark-cli api 调用即可）
+# 如需手动获取 token，用 lark-cli 配置的凭据：
+lark-cli api GET /open-apis/contact/v3/users/find_by_department --as bot \
+  --params '{"department_id":"<dept_id>","user_id_type":"open_id","page_size":50}'
 
-with open(os.path.expanduser('~/.claude.json')) as f:
-    config = json.load(f)
-args = config['mcpServers']['lark-mcp']['args']
-app_id = args[args.index('-a') + 1]
-app_secret = args[args.index('-s') + 1]
-
-# 获取 token
-req = urllib.request.Request(
-    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-    data=json.dumps({'app_id': app_id, 'app_secret': app_secret}).encode(),
-    headers={'Content-Type': 'application/json'}, method='POST')
-with urllib.request.urlopen(req) as resp:
-    token = json.loads(resp.read())['tenant_access_token']
-
-# 查询部门成员
-for dept_id in DEPT_IDS:
-    req = urllib.request.Request(
-        f'https://open.feishu.cn/open-apis/contact/v3/users/find_by_department'
-        f'?department_id={dept_id}&user_id_type=open_id'
-        f'&department_id_type=open_department_id&page_size=50',
-        headers={'Authorization': f'Bearer {token}'})
-    with urllib.request.urlopen(req) as resp:
-        items = json.loads(resp.read()).get('data', {}).get('items', [])
-        for u in items:
-            print(f"{u.get('name', '')} -> {u.get('open_id', '')}")
+# 批量查询多个部门
+for dept_id in od-44778258d5c056a8bc746c1c9b92032e od-4d23fdda045eb2310bc154aa672ca2e0; do
+  lark-cli api GET /open-apis/contact/v3/users/find_by_department --as bot \
+    --params "{\"department_id\":\"$dept_id\",\"user_id_type\":\"open_id\",\"department_id_type\":\"open_department_id\",\"page_size\":50}"
+done
 ```
 
 ### 已知部门
@@ -287,19 +265,17 @@ for item in workitems:
 用户确认后，批量写入：
 
 **新增记录：**
-```
-mcp__lark-mcp__bitable_v1_appTableRecord_batchCreate
-  path: { app_token: "<app_token>", table_id: "<table_id>" }
-  params: { user_id_type: "open_id" }
-  data: { records: [...] }
+```bash
+lark-cli api POST /open-apis/bitable/v1/apps/<app_token>/tables/<table_id>/records/batch_create --as bot \
+  --params '{"user_id_type":"open_id"}' \
+  --data '{"records":[...]}'
 ```
 
 **更新已有记录：**
-```
-mcp__lark-mcp__bitable_v1_appTableRecord_batchUpdate
-  path: { app_token: "<app_token>", table_id: "<table_id>" }
-  params: { user_id_type: "open_id" }
-  data: { records: [{ record_id: "recXXX", fields: {...} }, ...] }
+```bash
+lark-cli api POST /open-apis/bitable/v1/apps/<app_token>/tables/<table_id>/records/batch_update --as bot \
+  --params '{"user_id_type":"open_id"}' \
+  --data '{"records":[{"record_id":"recXXX","fields":{...}},...]}'
 ```
 
 ## Step 8: 输出汇总

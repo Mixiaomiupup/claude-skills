@@ -7,7 +7,7 @@ description: "Embodied AI industry intelligence briefing system - daily digest o
 
 面向企业管理者的具身AI/人形机器人行业日报。通过多源数据采集（Grok 搜索 + 核心账号 + Tavily），生成情报摘要，发布到飞书并推送。
 
-**工具依赖**：`anyweb` CLI（Grok 搜索 + 核心账号推文）、`tavily_search`（补充搜索）、lark-mcp bitable（人物表）、飞书 API（发布+推送）
+**工具依赖**：`anyweb` CLI（Grok 搜索 + 核心账号推文）、`tavily_search`（补充搜索）、lark-cli bitable（人物表）、飞书 API（发布+推送）
 
 ## Mode Router
 

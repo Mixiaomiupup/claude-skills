@@ -11,23 +11,23 @@
 
 ```mermaid
 graph LR
-    x2md[x2md<br/>X链接→Markdown] --> kb
-    ucal[ucal<br/>跨平台内容分析] --> kb
-    x-feed[x-feed<br/>X信息流] --> kb
+    x2md[x2md<br/>X链接→Markdown] --> ob
+    ucal[ucal<br/>跨平台内容分析] --> ob
+    x-feed[x-feed<br/>X信息流] --> ob
     x-feed --> feishu
 
     article-gen[article-gen<br/>文章生成引擎] --> article-image
     article-gen --> feishu
-    article-gen --> kb
+    article-gen --> ob
     article-gen --> wechat-publish
     article-image[article-image<br/>封面图/配图] --> gemini-image[gemini-image<br/>Gemini图片生成]
 
-    kb[kb<br/>Obsidian知识库] --> feishu[feishu<br/>飞书API]
-    feishu --> lark-mcp[lark-mcp<br/>飞书MCP工具]
+    ob[ob<br/>Obsidian知识库] --> feishu[feishu<br/>飞书API]
+    feishu --> lark-cli[lark-cli<br/>飞书CLI]
 
     wechat-publish[wechat-publish<br/>微信公众号发布] -.->|Chrome CDP| chrome[系统Chrome]
 
-    embodied-intel[embodied-intel<br/>具身智能资讯] --> kb
+    embodied-intel[embodied-intel<br/>具身智能资讯] --> ob
 
     subgraph 浏览器自动化
         anyweb[anyweb CLI<br/>daemon架构]
@@ -45,7 +45,7 @@ graph LR
 graph LR
     project-sync[project-sync<br/>云效→飞书表格] --> yunxiao-mcp[yunxiao MCP]
     project-sync --> feishu[feishu<br/>飞书API]
-    project-sync --> lark-mcp[lark-mcp<br/>飞书MCP工具]
+    project-sync --> lark-cli[lark-cli<br/>飞书CLI]
 
     notify[notify<br/>飞书消息推送] --> yunxiao-mcp
     notify --> feishu
@@ -81,18 +81,18 @@ graph LR
 
 | Skill | 用途 | 依赖 | 行数 | 关键能力 |
 |-------|------|------|------|---------|
-| **article-gen** | 6种文章类型生成引擎 | article-image, feishu, kb | 486 | convert→enrich→translate→cover→publish |
+| **article-gen** | 6种文章类型生成引擎 | article-image, feishu, ob | 486 | convert→enrich→translate→cover→publish |
 | **article-image** | 封面图/配图生成 | gemini-image | 196 | 5D风格系统 + Mermaid智能路由 |
 | **commit** | Git提交消息生成 | - | 109 | Google convention风格 |
 | **debug** | 系统性调试 | - | 219 | 症状分析→根因→方案 |
 | **doc-control** | 文档生成控制 | - | 151 | 防止过度生成文档 |
 | **embodied-intel** | 具身智能行业资讯 | anyweb CLI | 302 | 日报、人物追踪、人才流动 |
 | **explain** | 代码解释 | - | 119 | 类比、图解、分步拆解 |
-| **feishu** | 飞书API参考 | lark-mcp | 948 | Wiki/Doc/Bitable/IM/Drive/Sheets 168工具 |
+| **feishu** | 飞书API参考 | lark-cli | 948 | Wiki/Doc/Bitable/IM/Drive/Sheets 168工具 |
 | **gemini-image** | Gemini图片生成 | - | 62 | 生成、编辑、理解 |
-| **kb** | Obsidian知识库管理 | feishu | 520 | 写入/搜索/综合/洞察/飞书同步/待办 |
+| **ob** | Obsidian知识库管理 | feishu | 520 | 写入/搜索/综合/洞察/飞书同步/待办 |
 | **notify** | 飞书消息推送 | yunxiao-mcp, feishu | 242 | 按部门/人员定向私信推送 |
-| **project-sync** | 云效→飞书表格同步 | yunxiao-mcp, feishu, lark-mcp | 342 | 迭代工作项→多维表格 |
+| **project-sync** | 云效→飞书表格同步 | yunxiao-mcp, feishu, lark-cli | 342 | 迭代工作项→多维表格 |
 | **python-style** | Python代码风格 | - | 159 | PEP 8 / Google Style |
 | **refactor** | 代码重构建议 | - | 138 | 可维护性、可读性、最佳实践 |
 | **remote-repos** | 远程仓库操作 | - | 304 | GitHub(gh) + GitLab(glab) + 云效 |
@@ -102,7 +102,7 @@ graph LR
 | **sync-config** | 配置同步 | git | 127 | 备份/恢复/推送Claude配置 |
 | **test** | 测试生成 | - | 216 | 单元测试 + 集成测试 |
 | **ucal** | 跨平台内容分析 | anyweb CLI | 265 | 小红书/知乎/X/通用网页 |
-| **x-feed** | X信息流系统 | anyweb CLI, feishu, kb | 437 | 关注扩展、热点提取、知识蒸馏 |
+| **x-feed** | X信息流系统(智涌日报) | anyweb CLI, feishu, ob | ~340+refs | Grok 4轮查询、视频标记、知识蒸馏 |
 | **x2md** | X链接→Markdown | - | 100 | 帖子/Thread/长文转换 |
 | **wechat-publish** | 微信公众号发布 | Chrome CDP | 165 | 图片上传→草稿创建→HTML转换→发布 |
 | **youpin** | 悠悠有品查询 | - | 174 | 订单/库存/收益/市场行情(只读) |
@@ -113,7 +113,7 @@ graph LR
 
 ## 3. 关键工作流说明
 
-### 3.1 kb 飞书发布流程 (Section 1.6)
+### 3.1 ob 飞书发布流程 (Section 1.6)
 
 ```
 判断新建/更新 → 预处理MD → curl上传导入 → moveDocsToWiki → Mermaid转图片(必须) → 回写frontmatter
@@ -181,8 +181,9 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 
 | 日期 | 涉及 Skill | 变更摘要 |
 |------|-----------|---------|
+| 2026-03-30 | x-feed | **重构**: Grok 查询从 3→4 轮（AI行业/AI从业者/具身行业/具身从业者），新增人事战略类新闻覆盖；SKILL.md 瘦身（716→~340行），媒体采集和飞书发布细节提取到 references/；新增视频 🎬 标记和具身视频优先下载策略；日期验证改为 `date` 命令确认；统一 5 板块分类；品牌名从"科技日报"改为"智涌日报" |
 | 2026-03-23 | wechat-publish | **新增 skill**: 微信公众号发布流程(系统Chrome CDP + API)；涵盖图片上传、草稿创建、HTML转换、发布、修改已发表文章；关键约束：禁止 margin:-16px、必须用系统Chrome(非Playwright) |
 | 2026-03-23 | x-feed, feishu, feishu_publish.py | **日报媒体链路**: x-feed 新增 Step 7.5(封面图+推文截图+Obsidian嵌入)；feishu_publish.py 重写 insert_images_to_doc() 使用 3-step 方法(_insert_image_block helper)，修复 block text 搜索范围(+bullet/ordered/callout)和 URL 解码匹配；feishu SKILL.md 更新 troubleshooting 和 helper 说明；ARCHITECTURE 新增 Section 3.3 媒体链路 |
 | 2026-03-22 | ucal, x-feed, embodied-intel, article-gen | **ucal→anyweb 迁移**: 所有 skill 从 ucal MCP 调用迁移到 anyweb CLI 原子命令；MCP 配置从 ucal 切换到 anyweb；新增 Section 3.3 迁移对比表 |
-| 2026-03-21 | kb, feishu | **飞书发布流程重构**: kb 新增 Section 1.6 完整发布链路(新建/更新判断 + 预处理 + 导入 + Mermaid转图片必须执行)；feishu 图片上传改为 tenant_token 优先(此前错误记录为必须UAT) |
+| 2026-03-21 | ob, feishu | **飞书发布流程重构**: ob 新增 Section 1.6 完整发布链路(新建/更新判断 + 预处理 + 导入 + Mermaid转图片必须执行)；feishu 图片上传改为 tenant_token 优先(此前错误记录为必须UAT) |
 | 2026-03-21 | ARCHITECTURE.md | **初始创建**: 扫描全部 24 个 skill，建立架构全景、工作流地图、索引表 |

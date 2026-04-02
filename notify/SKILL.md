@@ -154,11 +154,11 @@ def api_call(method, url, data=None, token=None):
         return json.loads(resp.read())
 
 # 1. 获取 token
-with open(os.path.expanduser("~/.claude.json")) as f:
+with open(os.path.expanduser("~/.lark-cli/apps.json")) as f:
     config = json.load(f)
-args = config["mcpServers"]["lark-mcp"]["args"]
-app_id = args[args.index("-a") + 1]
-app_secret = args[args.index("-s") + 1]
+default_app = config["apps"][config["default"]]
+app_id = default_app["app_id"]
+app_secret = default_app["app_secret"]
 
 token = api_call("POST",
     "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",

@@ -1,6 +1,6 @@
 ---
-name: ucal
-description: "跨平台内容分析和话题调研。给链接时自动分析内容，说'调研XX'时搜索多篇综合分析。支持小红书、知乎、X、通用网页。当用户给出 xhs/zhihu/x.com 链接、说'帮我看看'、'分析一下'、'调研XX'、'大家怎么看'时使用。"
+name: analyze
+description: "跨平台内容分析和话题调研。给链接时自动分析内容，说'调研XX'时搜索多篇综合分析。支持小红书、知乎、X、通用网页。当用户给出 xhs/zhihu/x.com 链接、说'帮我看看'、'分析一下'、'调研XX'、'大家怎么看'时使用。只做分析不保存 — 用户说'保存/存ob/存一下'走 article-gen skill。"
 ---
 
 # 跨平台内容分析
@@ -8,6 +8,11 @@ description: "跨平台内容分析和话题调研。给链接时自动分析内
 利用 anyweb CLI 获取跨平台内容，按平台特征差异化分析。
 
 **核心思路**: anyweb CLI 解决「怎么取数据」，本 skill 解决「取到后怎么分析」。
+
+**边界**:
+- 本 skill 只做内容读取和分析，不保存到 Obsidian
+- 用户说"保存/存ob/存一下" → 提示使用 `article-gen` skill
+- X/Twitter 链接转 MD → 提示使用 `x2md` skill
 
 **工具**: `anyweb` CLI (via Bash tool)。验证: `anyweb doctor`。
 

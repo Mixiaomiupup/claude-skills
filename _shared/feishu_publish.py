@@ -30,13 +30,11 @@ def _curl_json(args):
 
 
 def _get_feishu_credentials():
-    """Read app_id and app_secret from ~/.claude.json lark-mcp config."""
-    with open(os.path.expanduser("~/.claude.json")) as f:
+    """Read app_id and app_secret from ~/.lark-cli/apps.json."""
+    with open(os.path.expanduser("~/.lark-cli/apps.json")) as f:
         config = json.load(f)
-    lark_args = config["mcpServers"]["lark-mcp"]["args"]
-    app_id = lark_args[lark_args.index("-a") + 1]
-    app_secret = lark_args[lark_args.index("-s") + 1]
-    return app_id, app_secret
+    default_app = config["apps"][config["default"]]
+    return default_app["app_id"], default_app["app_secret"]
 
 
 def _get_tenant_token(app_id, app_secret):
@@ -53,13 +51,25 @@ def _get_tenant_token(app_id, app_secret):
 
 
 def _preprocess_markdown(md_path):
-    """Remove YAML frontmatter, Obsidian wikilinks, and image embeds."""
+    """Remove YAML frontmatter, Obsidian wikilinks, and convert image embeds to placeholders."""
     with open(os.path.expanduser(md_path), "r", encoding="utf-8") as f:
         content = f.read()
 
     # Remove YAML frontmatter
     content = re.sub(r"^---\n.*?\n---\n", "", content, count=1, flags=re.DOTALL)
-    # Remove ![[image]] embeds
+    # Replace ![[tweet-*.png]] with text placeholders for later image positioning
+    # Replace ![[*-cover.png]] or ![[cover.png]] with cover placeholder
+    content = re.sub(
+        r"!\[\[([^\]]*?cover[^\]]*?\.png)\]\]",
+        r"FEISHU_IMAGE_PLACEHOLDER_cover",
+        content,
+    )
+    content = re.sub(
+        r"!\[\[(tweet-([^\]]+?)\.png)\]\]",
+        r"FEISHU_IMAGE_PLACEHOLDER_\2",
+        content,
+    )
+    # Remove any remaining ![[image]] embeds (non-tweet images)
     content = re.sub(r"!\[\[.*?\]\]", "", content)
     # Convert [[wikilink]] to plain text
     content = re.sub(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]", lambda m: m.group(2) or m.group(1), content)
@@ -391,15 +401,72 @@ def _insert_image_block(token, doc_token, parent_block_id, image_path, index=-1)
     return True
 
 
+def _delete_block(token, doc_token, block_id):
+    """Delete a single block from a Feishu document."""
+    # Find the block's parent and its index
+    blocks = _list_all_blocks(token, doc_token)
+    page_block = blocks[0]
+    children = page_block.get("children", [])
+    try:
+        idx = children.index(block_id)
+        _curl_json(
+            [
+                "-X", "DELETE",
+                f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+                f"/blocks/{page_block['block_id']}/children/batch_delete",
+                "-H", f"Authorization: Bearer {token}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"start_index": idx, "end_index": idx + 1}),
+            ]
+        )
+        time.sleep(0.1)
+    except (ValueError, Exception) as e:
+        print(f"[feishu] Warning: could not delete block {block_id}: {e}")
+
+
+def _get_block_text(block):
+    """Extract all text content from a Feishu block."""
+    text_keys = ("text", "heading1", "heading2", "heading3", "heading4",
+                 "heading5", "heading6", "heading7", "heading8", "heading9",
+                 "quote", "bullet", "ordered", "callout")
+    text_content = ""
+    for key in text_keys:
+        elem = block.get(key, {})
+        for el in elem.get("elements", []):
+            tc = el.get("text_run", {}).get("content", "")
+            text_content += tc
+    return text_content
+
+
+def _find_placeholder_blocks(token, doc_token):
+    """Find blocks containing FEISHU_IMAGE_PLACEHOLDER markers.
+
+    Returns:
+        dict mapping placeholder_id (e.g. 'friedrice', 'cover') to block_id.
+    """
+    blocks = _list_all_blocks(token, doc_token)
+    placeholders = {}
+    for block in blocks:
+        text = _get_block_text(block)
+        m = re.search(r"FEISHU_IMAGE_PLACEHOLDER_(\S+)", text)
+        if m:
+            placeholders[m.group(1)] = block["block_id"]
+    return placeholders
+
+
 def insert_images_to_doc(token, doc_token, media_dir, tweet_block_map=None):
-    """Insert images into a Feishu document using the 3-step method.
+    """Insert images into a Feishu document by replacing placeholder blocks.
+
+    The _preprocess_markdown step converts ![[tweet-{id}.png]] into text
+    placeholders (FEISHU_IMAGE_PLACEHOLDER_{id}). This function finds those
+    placeholder blocks, inserts image blocks at their position, then deletes
+    the placeholder blocks.
 
     Args:
         token: Feishu tenant access token.
         doc_token: Target document token.
         media_dir: Directory containing screenshot files (tweet-{id}.png).
-        tweet_block_map: Optional dict mapping tweet_id to block_id for positioning.
-            If None, images are appended to the end of the document.
+        tweet_block_map: Unused, kept for API compatibility.
 
     Returns:
         Number of images successfully inserted.
@@ -412,59 +479,69 @@ def insert_images_to_doc(token, doc_token, media_dir, tweet_block_map=None):
     page_block_id = blocks[0]["block_id"]
     inserted = 0
 
-    # Build a map of block text content -> block_id for positioning
-    # Search ALL text-bearing keys including bullet/ordered lists
-    block_text_map = {}
-    text_keys = ("text", "heading1", "heading2", "heading3", "heading4",
-                 "heading5", "heading6", "heading7", "heading8", "heading9",
-                 "quote", "bullet", "ordered", "callout")
-    for block in blocks:
-        text_content = ""
-        for key in text_keys:
-            elem = block.get(key, {})
-            for el in elem.get("elements", []):
-                tc = el.get("text_run", {}).get("content", "")
-                text_content += tc
-                link = el.get("text_run", {}).get("text_element_style", {}).get("link", {})
-                if link.get("url"):
-                    import urllib.parse
-                    text_content += urllib.parse.unquote(link["url"])
-        if text_content:
-            block_text_map[block["block_id"]] = text_content
+    # Find all placeholder blocks
+    placeholders = _find_placeholder_blocks(token, doc_token)
+    print(f"[feishu] Found {len(placeholders)} image placeholders: {list(placeholders.keys())}")
 
-    # Insert cover image first (at top of document)
+    # Process cover image
     cover_path = media_path / "cover.png"
-    if cover_path.exists():
+    if cover_path.exists() and "cover" in placeholders:
+        placeholder_bid = placeholders["cover"]
+        # Get current position of placeholder
+        current_blocks = _list_all_blocks(token, doc_token)
+        current_children = current_blocks[0].get("children", [])
+        try:
+            idx = current_children.index(placeholder_bid)
+            if _insert_image_block(token, doc_token, page_block_id, str(cover_path), index=idx):
+                inserted += 1
+                # Delete the placeholder block
+                _delete_block(token, doc_token, placeholder_bid)
+                print(f"[feishu] Inserted cover image at index {idx}")
+            else:
+                print(f"[feishu] Warning: cover insert failed")
+        except ValueError:
+            if _insert_image_block(token, doc_token, page_block_id, str(cover_path), index=1):
+                inserted += 1
+                print(f"[feishu] Inserted cover image at top (fallback)")
+        time.sleep(0.3)
+    elif cover_path.exists():
+        # No placeholder found, insert at top
         if _insert_image_block(token, doc_token, page_block_id, str(cover_path), index=1):
             inserted += 1
-            print(f"[feishu] Inserted cover image")
-        else:
-            print(f"[feishu] Warning: cover insert failed")
+            print(f"[feishu] Inserted cover image at top (no placeholder)")
         time.sleep(0.3)
 
-    # Insert tweet screenshots
+    # Process tweet screenshots
     for img_file in sorted(media_path.glob("tweet-*.png")):
         tweet_id = img_file.stem.replace("tweet-", "")
 
-        # Find the block containing this tweet's URL
-        target_index = -1
-        for bid, text in block_text_map.items():
-            if tweet_id in text:
-                current_blocks = _list_all_blocks(token, doc_token)
-                current_children = current_blocks[0].get("children", [])
-                try:
-                    idx = current_children.index(bid)
-                    target_index = idx + 1
-                except ValueError:
-                    pass
-                break
-
-        if _insert_image_block(token, doc_token, page_block_id, str(img_file), index=target_index):
-            inserted += 1
-            print(f"[feishu] Inserted screenshot: {img_file.name}")
+        if tweet_id in placeholders:
+            placeholder_bid = placeholders[tweet_id]
+            current_blocks = _list_all_blocks(token, doc_token)
+            current_children = current_blocks[0].get("children", [])
+            try:
+                idx = current_children.index(placeholder_bid)
+                if _insert_image_block(token, doc_token, page_block_id, str(img_file), index=idx):
+                    inserted += 1
+                    _delete_block(token, doc_token, placeholder_bid)
+                    print(f"[feishu] Inserted {img_file.name} at index {idx}")
+                else:
+                    print(f"[feishu] Warning: insert failed for {img_file.name}")
+            except ValueError:
+                if _insert_image_block(token, doc_token, page_block_id, str(img_file), index=-1):
+                    inserted += 1
+                    print(f"[feishu] Inserted {img_file.name} at end (fallback)")
         else:
-            print(f"[feishu] Warning: screenshot insert failed for {img_file.name}")
+            print(f"[feishu] Warning: no placeholder found for {img_file.name}, appending to end")
+            if _insert_image_block(token, doc_token, page_block_id, str(img_file), index=-1):
+                inserted += 1
         time.sleep(0.3)
+
+    # Clean up any remaining placeholder blocks that had no matching image
+    remaining_placeholders = _find_placeholder_blocks(token, doc_token)
+    for pid, bid in remaining_placeholders.items():
+        _delete_block(token, doc_token, bid)
+        print(f"[feishu] Cleaned up unused placeholder: {pid}")
 
     return inserted
 

@@ -1,11 +1,11 @@
 ---
 name: article-gen
-description: "Universal article generation engine. Supports 6 article types: news, architecture, review, tutorial, notes, essay. Orchestrates convert -> enrich -> translate -> cover image -> publish. Use when user shares a link to save, says '保存', '写个测评', '架构分析', '记个教程', '读书笔记', '分享到飞书', or any article generation flow."
+description: "Universal article generation engine. Supports 8 article types: news, reference, architecture, review, tutorial, notes, essay, idea. ALL content creation/saving to Obsidian vault goes through this skill. Use when user shares a URL ('保存', '存ob', '存一下'), says '记个点子', '新想法', '记下来', '写个测评', '架构分析', '记个教程', '读书笔记', '分享到飞书', or any content creation flow. NOT for vault queries — searching/browsing/syncing use ob skill."
 ---
 
 # Article Gen
 
-通用文章生成引擎。支持 6 种文章类型，统筹从素材到发布的完整流程。
+通用文章生成引擎。支持 8 种文章类型，统筹从素材到发布的完整流程。所有内容创建/保存到 Obsidian vault 都通过本 skill。
 
 ## 文章类型 (`type`)
 
@@ -17,6 +17,8 @@ description: "Universal article generation engine. Supports 6 article types: new
 | `tutorial` | 技术教程 | 问题描述、代码片段 | "写个教程"、"怎么做" |
 | `notes` | 读书/论文笔记 | PDF、文章链接、手写要点 | "读书笔记"、"读完了" |
 | `essay` | 个人观点/思考 | 口述、大纲、零散想法 | "我觉得"、"想聊聊" |
+| `idea` | 产品想法/创意点子 | 口述、灵感 | "记个点子"、"新想法"、"我想做..." |
+| `reference` | 外部技术文章搬运 | 博客/文章 URL | URL + "保存"、"存一下" |
 
 ### 类型推断（混合模式）
 
@@ -28,6 +30,8 @@ description: "Universal article generation engine. Supports 6 article types: new
 - 用户说"怎么做/教程/步骤" → `tutorial`
 - 用户说"读完了/笔记/摘录" → `notes`
 - 用户说"我觉得/想聊聊/观点" → `essay`
+- 用户说"记个点子/新想法/我想做" → `idea`
+- 非 X 的外部 URL + "保存/存ob/存一下" → `reference`
 - 推断不了 → 问用户选择
 
 ## 调用的 Skill
@@ -39,6 +43,23 @@ description: "Universal article generation engine. Supports 6 article types: new
 | `feishu` | 飞书知识库发布 + 全员广播 | 用户确认发布时（所有类型） |
 
 `x2md` 和 `article-image` 是独立 skill，不知道彼此的存在。`article-gen` 负责串联它们。
+
+## 存储路径
+
+所有内容保存到 `~/Documents/obsidian/mixiaomi/`，按 type 和 category 选择子目录：
+
+| type | 目录 | 文件名 |
+|------|------|--------|
+| `news` | `{category一级}/` | `<作者> - <标题>.md` |
+| `reference` | `{category一级}/` | `<标题>.md` |
+| `review` | `{category一级}/` | `<标题>.md` |
+| `tutorial` | `{category一级}/` | `<标题>.md` |
+| `architecture` | `学习笔记/` | `<标题>.md` |
+| `notes` | `学习笔记/` | `<标题>.md` |
+| `essay` | `创意点子/` | `<标题>.md` |
+| `idea` | `创意点子/` | `<标题>.md` |
+
+category 一级分类直接对应 vault 顶级目录：`模型前沿/`、`具身动态/`、`编程范式/`、`工程实战/`、`AI思考/`、`商业观察/`。不做二次映射。
 
 ## 分类体系 (`category`)
 
@@ -79,8 +100,10 @@ description: "Universal article generation engine. Supports 6 article types: new
 | `architecture` | 项目路径或笔记 | 用户已完成研究，直接提供素材 |
 | `review` | 产品 URL 或试用笔记 | 用户已完成研究，直接提供素材 |
 | `tutorial` | 代码片段 / 问题描述 | 用户直接提供 |
-| `notes` | PDF / URL / 手写要点 | ucal 抓取或用户直接提供 |
+| `notes` | PDF / URL / 手写要点 | analyze 抓取或用户直接提供 |
 | `essay` | 口述 / 大纲 | 用户直接提供 |
+| `idea` | 用户口述 / 灵感 | 用户直接提供 |
+| `reference` | 外部 URL | `tavily_extract`（`include_images: true`）+ 存 Markdown |
 | 所有 | 本地已有 .md | 跳过转换，直接进入 enrichment |
 
 **研究与写作分离**：非 `news` 类型的前置研究（代码探索、产品试用、资料搜集）在 article-gen 之外完成。article-gen 从"有素材"开始。
@@ -291,6 +314,22 @@ PATCH /docx/v1/documents/{doc}/blocks/{block_id}
 ## 结论
 ```
 
+### idea（创意点子）
+```
+## 核心想法
+## 目标用户
+## 可能的实现路径
+## 我的笔记
+```
+
+### reference（技术参考）
+```
+## 翻译（非中文时）
+## 原文（非中文时）
+## 要点提炼
+## 我的笔记
+```
+
 ## Frontmatter 设计
 
 ### 核心字段（所有类型共享）
@@ -363,6 +402,18 @@ reading_progress: "completed"
 **essay：**
 ```yaml
 thesis: "独立开发者最大的敌人不是技术，是心态"
+```
+
+**idea：**
+```yaml
+target_user: "独立开发者"
+```
+
+**reference：**
+```yaml
+original_author: "Ryan Lopopolo"
+original_date: "2026-02-11"
+original_site: "OpenAI Blog"
 ```
 
 ## Frontmatter 完整示例
@@ -464,10 +515,10 @@ article-gen (本 skill，总编排)
   └── Claude ——— enrichment + 翻译（内置能力，非 skill）
 
 共享资源：
-  └── ~/Documents/obsidian/mixiaomi/meta/categories.md（与 kb skill 共享）
+  └── ~/Documents/obsidian/mixiaomi/meta/categories.md（与 ob skill 共享）
 
 x-feed digest 模式也可调用 article-gen 的 enrichment + 发布流程。
-kb sync 模式调用 feishu skill 做双向同步。
+ob sync 模式调用 feishu skill 做双向同步。
 ```
 
 每个 skill 只做一件事，article-gen 负责串联。

@@ -224,7 +224,7 @@ Skills 之间通过「调用」和「委托」形成协作链。每个 skill 只
 | 配图 → `cover-image` | 自包含 5D 风格体系，不再转发 baoyu-cover-image |
 | 生图 → `gemini-image` | cover-image 调它，用户也可直接调 |
 | 飞书操作 → `feishu` | 其他 skill 不直接调飞书 API |
-| MCP 工具名 ≠ skill 名 | `mcp__lark-mcp__*` 是 MCP server 工具名，`feishu` 是 skill 名 |
+| 飞书操作 → lark-cli | 所有飞书 API 统一用 `lark-cli api` 调用，不再依赖 MCP server |
 
 ---
 

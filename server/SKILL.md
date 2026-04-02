@@ -1,19 +1,19 @@
 ---
 name: server
-description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to their cloud server. Also use when deploying projects, checking server status, or managing services on the remote machine.
+description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to cloud/remote machines. Also use when deploying projects, checking server status, or managing services. Machines are called 云机 (cloud), U机 (Ubuntu), W机 (Windows).
 ---
 
 # Machines Overview
 
-| Machine | Role | Access |
-| ------- | ---- | ------ |
-| Aliyun 轻量服务器 | Web hosting, frps relay | `ssh root@YOUR_SERVER_IP` |
-| 个人PC (Ubuntu) | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
-| 个人PC (Windows) | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` (via frp) |
+| 代号 | 角色 | Access |
+| ---- | ---- | ------ |
+| **云机** | Web 托管, frps 中继 | `ssh root@YOUR_SERVER_IP` |
+| **U机** | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
+| **W机** | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` (via frp) |
 
 ---
 
-# 1. Aliyun 轻量应用服务器
+# 1. 云机（Aliyun 轻量应用服务器）
 
 China East 2 (Shanghai) Ubuntu instance for hosting personal projects.
 
@@ -45,9 +45,9 @@ China East 2 (Shanghai) Ubuntu instance for hosting personal projects.
 | Project                          | Web Root               | Local Source           | Port                                 |
 | -------------------------------- | ---------------------- | ---------------------- | ------------------------------------ |
 | shige-h5 (food personality test) | `/var/www/html/shige/` | `~/projects/shige-h5/` | 80 (nginx) → `/shige`                |
-| csfilter (CS2 饰品量化分析)      | nginx 反代到工作站     | -                      | nginx `/csfilter/` → 工作站:5001     |
+| csfilter (CS2 饰品量化分析)      | nginx 反代到U机       | -                      | nginx `/csfilter/` → U机:5001       |
 
-> **注意**: csfilter 实际运行在个人PC上，Aliyun 仅做 nginx 反向代理。见下方工作站部分。
+> **注意**: csfilter 实际运行在U机上，云机仅做 nginx 反向代理。见下方U机部分。
 
 ## Common Operations
 
@@ -68,7 +68,7 @@ ssh root@YOUR_SERVER_IP "cat /etc/nginx/sites-enabled/default"
 
 ### CSFilter Operations
 
-> csfilter 实际部署在个人PC上，不在 Aliyun。操作详见下方「个人PC - CSFilter」部分。
+> csfilter 实际部署在U机上，不在云机。操作详见下方U机部分。
 
 ## Nginx Routing Rules
 
@@ -127,7 +127,7 @@ sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 
 ---
 
-# 2. 个人PC (via frp)
+# 2. U机（Ubuntu 工作站，via frp）
 
 无公网 IP 的内网机器，通过 frp 穿透访问。适合跑 headless Chrome 采集等重计算任务。
 
@@ -136,7 +136,7 @@ sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 | Field    | Value                                        |
 | -------- | -------------------------------------------- |
 | SSH      | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP`         |
-| 穿透方式 | frpc → Aliyun frps (port 7000)               |
+| 穿透方式 | frpc → 云机 frps (port 7000)                 |
 | User     | `mixiaomi`                                   |
 
 ## Specs
@@ -157,13 +157,13 @@ sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 - **更新代码方式**: 使用 `scp` 从本地推送文件，不用 `git pull`
 
 ```bash
-# 推送文件到工作站（从本地 Mac 执行）
+# 推送文件到U机（从本地 Mac 执行）
 scp -P 6000 path/to/file mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/path/to/file
 ```
 
 ## CSFilter 部署
 
-csfilter 的实际运行环境在这台工作站上（不在 Aliyun）。
+csfilter 的实际运行环境在U机上（不在云机）。
 
 | 项目 | 值 |
 | ---- | -- |
@@ -209,14 +209,14 @@ sudo systemctl status frpc
 
 ## Notes
 
-- 无公网 IP，依赖 frp 穿透（frpc → Aliyun frps:7000 → port 6000）
+- 无公网 IP，依赖 frp 穿透（frpc → 云机 frps:7000 → port 6000）
 - frpc 断线需重连，配置为 systemd 服务开机自启
-- 比 Aliyun 2C2G 性能强很多，适合跑 Chrome 采集、数据处理等任务
+- 比云机 2C2G 性能强很多，适合跑 Chrome 采集、数据处理等任务
 - **已安装**: gh, python3, chrome, chromedriver, sqlite3(未安装)
 
 ---
 
-# 3. 个人PC - Windows (via frp)
+# 3. W机（Windows 工作站，via frp）
 
 无公网 IP 的内网 Windows 机器，通过 frp 穿透访问。
 
@@ -225,7 +225,7 @@ sudo systemctl status frpc
 | Field    | Value                                                |
 | -------- | ---------------------------------------------------- |
 | SSH      | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` |
-| 穿透方式 | frpc → Aliyun frps (port 7000) → port 6001          |
+| 穿透方式 | frpc → 云机 frps (port 7000) → port 6001             |
 | User     | `huazhi1`                                            |
 | Password | `huazhi1`                                            |
 
