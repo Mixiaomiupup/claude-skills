@@ -55,8 +55,8 @@ python3 "$SCRIPT" edit /path/to/image.png "Add a rainbow" -o /tmp/edited.png
 
 ## Config
 
-- Auth: `~/YOUR_SERVICE_ACCOUNT_FILE` (service account)
-- Project: `YOUR_GCP_PROJECT`, Location: `us-central1`
+- Auth: `~/uxfv3f-ogqz-cc08ce285c88.json` (service account)
+- Project: `uxfv3f-ogqz`, Location: `us-central1`
 - Gen model: `gemini-2.0-flash-preview-image-generation`
 - Understand model: `gemini-2.5-flash`
 - Deps: `google-genai`, `Pillow`, `google-auth`

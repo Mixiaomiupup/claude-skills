@@ -116,7 +116,7 @@ category 一级分类直接对应 vault 顶级目录：`模型前沿/`、`具身
 
 **非 X 链接抓取注意事项**：
 
-抓取非 X/Twitter 的 URL 时，用 `anyweb read` 获取正文，再用 `anyweb eval` 提取页面中的图片 URL：
+抓取非 X/Twitter 的 URL 时，用 `anyweb read` 获取正文，再用 `anyweb eval` 提取页面中的图片 URL。如果页面需要登录态（如 B 站会员内容），加 `--chrome` 使用用户真实浏览器（`--chrome` 与普通模式可同时使用，互不干扰）：
 
 ```bash
 # 1. 获取正文
