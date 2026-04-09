@@ -24,6 +24,13 @@
 | 12 | 行业前沿 | `HHHlw1YJGiC6tfkYTj3cpG79nLb` | `YuDDdVmmfoXmgDx6IamczOrVnn9` |
 | 13 | 研究资料 | `Om4rwETwOi2QHmkwoD8csARDnpN` | `GcfwdVGTyoiTznxdAPFcPYmCnYn` |
 
+### 日报子节点
+
+| 节点 | node_token | obj_token | 用途 |
+|------|-----------|-----------|------|
+| 日报 (root) | `UWyowUUOviS0HFkIqglcZmbHn1f` | `JZIjdCpepoL9VAxl0sPcmpPUn3f` | 根目录 |
+| 智涌日报 | `Rs4fwW23SiU0mCk0aBZcupXNnvd` | — | x-feed 智涌日报 |
+
 ### 行业前沿子节点
 
 | 节点 | node_token | obj_token | 用途 |
@@ -40,6 +47,7 @@
 | 群名 | chat_id |
 |------|---------|
 | 具身资讯分享 | `oc_ca0e539c7a997487125adcac0f52a3c4` |
+| 华智全员群 | `oc_c7e33df4ad9f8d387ab7348395d99b0a` |
 
 ## 已知部门
 

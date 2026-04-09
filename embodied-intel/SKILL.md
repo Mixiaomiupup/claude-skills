@@ -9,6 +9,8 @@ description: "Embodied AI industry intelligence briefing system - daily digest o
 
 **工具依赖**：`anyweb` CLI（Grok 搜索 + 核心账号推文）、`tavily_search`（补充搜索）、lark-cli bitable（人物表）、飞书 API（发布+推送）
 
+**Chrome 模式（必须使用）**：所有 anyweb 命令加 `--chrome` 标志，连接系统 Chrome 复用 X 登录态。首次使用：`anyweb --chrome doctor`。
+
 ## Mode Router
 
 | 用户意图 | Mode | 关键动作 |
@@ -39,7 +41,7 @@ ToolSearch: "+lark bitable record" -> appTableRecord_list, appTableRecord_batchU
 读取 `references/core_accounts.yaml` → 对核心账号抓取最新推文：
 
 ```bash
-anyweb --json read "https://x.com/{account}"
+anyweb --chrome --json read "https://x.com/{account}"
 ```
 
 每个账号抓取最近 5-10 条推文。**每条推文现在包含 `[View tweet](URL)` 链接**，直接使用。
@@ -50,24 +52,38 @@ anyweb --json read "https://x.com/{account}"
 
 通过 `anyweb` 原子命令调用 Grok 搜索 X/Twitter。anyweb daemon 在命令间保持页面状态，每步串行执行即可。
 
-**Grok 搜索模板（观察者模式）**：
+**Grok 搜索模板**：
 
-用轮询代替固定等待 — 观察页面文本是否经历过增长并稳定下来，自动判断回复完成。
-典型 20-40 秒完成。
+两种方案等待 Grok 回复完成。推荐方案 A（AX Tree），方案 B 作为回退。
 
 ```bash
 # 1. 打开 Grok 新对话
-anyweb open "https://x.com/i/grok?new=true"
+anyweb --chrome open "https://x.com/i/grok?new=true"
 # 2. 等待输入框出现
-anyweb wait selector "textarea[placeholder='Ask anything']" --timeout 15000
+anyweb --chrome wait selector "textarea[placeholder='Ask anything']" --timeout 15000
 # 3. 点击输入框并输入问题（用 type 命令，底层是键盘事件）
-anyweb click "textarea[placeholder='Ask anything']"
-anyweb type "<问题>. Include tweet URLs.\n"
-# 4. 观察者等待回复完成
-anyweb eval "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"
+anyweb --chrome click "textarea[placeholder='Ask anything']"
+anyweb --chrome type "<问题>. Include tweet URLs.\n"
+
+# 4a. 方案 A (推荐): AX Tree 轮询检测 + 读取
+# 检测"Copy text"按钮出现 = Grok 回答完成
+for i in $(seq 1 60); do
+  sleep 3
+  anyweb --chrome state --ax -i 2>/dev/null | grep -q '"Copy text"' && break
+done
+# 读取完整回答（AX tree 包含结构化文本 + URL）
+anyweb --chrome state --ax > /tmp/grok_result.txt
+
+# 4b. 方案 B (回退): JS Observer — 当 AX tree 不可用时
+anyweb --chrome eval "new Promise(resolve=>{let lastLen=0,maxLen=0,stableCount=0,growthSeen=false;const start=Date.now();const check=()=>{const elapsed=Math.floor((Date.now()-start)/1000);const text=document.body.innerText;const len=text.length;if(len>maxLen)maxLen=len;if(len>lastLen+50){growthSeen=true;stableCount=0}else if(Math.abs(len-lastLen)<10){stableCount++}else{stableCount=0}lastLen=len;if(growthSeen&&stableCount>=3&&elapsed>20){resolve(text.substring(0,8000))}else if(elapsed>120){resolve(text.substring(0,8000))}else{setTimeout(check,3000)}};setTimeout(check,10000)})"
 ```
 
-**观察者逻辑**：
+**方案 A 优势**：
+- 不需要复杂 JS Promise，用 shell 循环即可
+- AX tree 的 StaticText 节点包含 Grok 完整回答（含 URL、列表结构），比 `body.innerText` 信息更丰富
+- `state --ax -i` 只看交互元素，响应快、输出小
+
+**方案 B 观察者逻辑**（回退）：
 1. 先等 10 秒让 Grok 开始处理
 2. 每 3 秒检查文本长度变化
 3. 文本**经历过增长**（>50 字符）且**连续 3 次无变化**（9 秒稳定） → 判定完成
@@ -294,8 +310,9 @@ Managed in `references/core_accounts.yaml`. Read this file at the start of diges
 
 ## Known Limitations
 
-- **Grok 搜索耗时**：观察者模式下每轮 ~20-40 秒，3-4 轮总计 ~1.5-2.5 分钟。兜底超时 120 秒。
+- **Grok 搜索耗时**：每轮 ~20-40 秒，3-4 轮总计 ~1.5-2.5 分钟。兜底超时 120/180 秒。
 - **Grok 不可并行**：每个 Grok 调用独占一个浏览器页面，不能通过 Agent 并行多个 Grok 搜索。但 Grok 与 platform_read/Tavily 可以并行。
+- **AX Tree 新特性**：`state --ax` 获取结构化页面文本（含所有 StaticText），`state --ax -i` 仅交互元素。推荐用于 Grok 完成检测和回答读取。
 - **X 登录要求**：浏览器必须已登录 X 账号，否则 Grok 页面无法加载。
 - **Bitable 分页**：人物超过 100 人时需用 `page_token` 翻页。
 - **时间戳格式**：Bitable DateTime 字段用毫秒时间戳（`int(time.time() * 1000)`）。

@@ -1,11 +1,11 @@
 ---
 name: article-gen
-description: "Universal article generation engine. Supports 8 article types: news, reference, architecture, review, tutorial, notes, essay, idea. ALL content creation/saving to Obsidian vault goes through this skill. Use when user shares a URL ('保存', '存ob', '存一下'), says '记个点子', '新想法', '记下来', '写个测评', '架构分析', '记个教程', '读书笔记', '分享到飞书', or any content creation flow. NOT for vault queries — searching/browsing/syncing use ob skill."
+description: "Universal article generation engine. Supports 9 article types: news, reference, research, architecture, review, tutorial, notes, essay, idea. ALL content creation/saving to Obsidian vault goes through this skill. Use when user shares a URL ('保存', '存ob', '存一下'), says '调研XX公司', '帮我了解XX', 'XX是什么公司', '记个点子', '新想法', '记下来', '写个测评', '架构分析', '记个教程', '读书笔记', '分享到飞书', or any content creation flow. NOT for vault queries — searching/browsing/syncing use ob skill."
 ---
 
 # Article Gen
 
-通用文章生成引擎。支持 8 种文章类型，统筹从素材到发布的完整流程。所有内容创建/保存到 Obsidian vault 都通过本 skill。
+通用文章生成引擎。支持 9 种文章类型，统筹从素材到发布的完整流程。所有内容创建/保存到 Obsidian vault 都通过本 skill。
 
 ## 文章类型 (`type`)
 
@@ -19,6 +19,7 @@ description: "Universal article generation engine. Supports 8 article types: new
 | `essay` | 个人观点/思考 | 口述、大纲、零散想法 | "我觉得"、"想聊聊" |
 | `idea` | 产品想法/创意点子 | 口述、灵感 | "记个点子"、"新想法"、"我想做..." |
 | `reference` | 外部技术文章搬运 | 博客/文章 URL | URL + "保存"、"存一下" |
+| `research` | 公司/项目调研报告 | 公司名 | "调研 XX"、"帮我了解 XX"、"XX 是什么公司" |
 
 ### 类型推断（混合模式）
 
@@ -32,6 +33,7 @@ description: "Universal article generation engine. Supports 8 article types: new
 - 用户说"我觉得/想聊聊/观点" → `essay`
 - 用户说"记个点子/新想法/我想做" → `idea`
 - 非 X 的外部 URL + "保存/存ob/存一下" → `reference`
+- 用户说"调研 XX/帮我了解 XX/XX 是什么公司" → `research`
 - 推断不了 → 问用户选择
 
 ## 调用的 Skill
@@ -39,25 +41,28 @@ description: "Universal article generation engine. Supports 8 article types: new
 | Skill | 职责 | 何时调用 |
 |-------|------|---------|
 | `x2md` | X/Twitter → Markdown 转换 | `news` 类型且输入是 X 链接时 |
-| `article-image` | 封面配图（5D 风格 + 生图） | enrichment 后（所有类型） |
+| `article-image` | 封面配图（官方图优先，无则 AI 生成） | enrichment 后（所有类型） |
 | `feishu` | 飞书知识库发布 + 全员广播 | 用户确认发布时（所有类型） |
 
 `x2md` 和 `article-image` 是独立 skill，不知道彼此的存在。`article-gen` 负责串联它们。
 
 ## 存储路径
 
-所有内容保存到 `~/Documents/obsidian/mixiaomi/`，按 type 和 category 选择子目录：
+按 type 选择目标 vault 和子目录：
 
 | type | 目录 | 文件名 |
 |------|------|--------|
-| `news` | `{category一级}/` | `<作者> - <标题>.md` |
-| `reference` | `{category一级}/` | `<标题>.md` |
-| `review` | `{category一级}/` | `<标题>.md` |
-| `tutorial` | `{category一级}/` | `<标题>.md` |
-| `architecture` | `学习笔记/` | `<标题>.md` |
-| `notes` | `学习笔记/` | `<标题>.md` |
-| `essay` | `创意点子/` | `<标题>.md` |
-| `idea` | `创意点子/` | `<标题>.md` |
+| `news` | `~/Documents/obsidian/mixiaomi/raw/{category一级}/` | `<作者> - <标题>.md` |
+| `reference` | `~/Documents/obsidian/mixiaomi/raw/{category一级}/` | `<作者> - <标题>.md` |
+| `review` | `~/Documents/obsidian/mixiaomi/notes/{category一级}/` | `<标题>.md` |
+| `tutorial` | `~/Documents/obsidian/mixiaomi/notes/{category一级}/` | `<标题>.md` |
+| `architecture` | `~/Documents/obsidian/mixiaomi/notes/学习笔记/` | `<标题>.md` |
+| `notes` | `~/Documents/obsidian/mixiaomi/notes/学习笔记/` | `<标题>.md` |
+| `essay` | `~/Documents/obsidian/mixiaomi/notes/创意点子/` | `<标题>.md` |
+| `idea` | `~/Documents/obsidian/mixiaomi/notes/创意点子/` | `<标题>.md` |
+| `research` | `~/Documents/obsidian/mixiaomi/raw/{category一级}/` | `<公司名> - 公司调研.md` |
+
+**单 Vault 三层结构**：news/reference 存入 raw/（外部素材），其他类型存入 notes/（个人内容）。wiki/ 由 LLM 编译维护。
 
 category 一级分类直接对应 vault 顶级目录：`模型前沿/`、`具身动态/`、`编程范式/`、`工程实战/`、`AI思考/`、`商业观察/`。不做二次映射。
 
@@ -96,35 +101,36 @@ category 一级分类直接对应 vault 顶级目录：`模型前沿/`、`具身
 | type | 输入 | 转换方式 |
 |------|------|---------|
 | `news` | X 链接 | 调用 `x2md` skill → `.md`（`status: raw`） |
-| `news` | 其他 URL | `tavily_extract`（`include_images: true`）+ 存 Markdown |
+| `news` | 其他 URL | `anyweb read URL`（提取正文 + 图片）+ 存 Markdown |
 | `architecture` | 项目路径或笔记 | 用户已完成研究，直接提供素材 |
 | `review` | 产品 URL 或试用笔记 | 用户已完成研究，直接提供素材 |
 | `tutorial` | 代码片段 / 问题描述 | 用户直接提供 |
 | `notes` | PDF / URL / 手写要点 | analyze 抓取或用户直接提供 |
 | `essay` | 口述 / 大纲 | 用户直接提供 |
 | `idea` | 用户口述 / 灵感 | 用户直接提供 |
-| `reference` | 外部 URL | `tavily_extract`（`include_images: true`）+ 存 Markdown |
+| `reference` | 外部 URL | `anyweb read URL`（提取正文 + 图片）+ 存 Markdown |
+| `research` | 公司名 | 三路发现 + anyweb read 全文 + X 推文采集（详见 [research-style.md](references/research-style.md)） |
 | 所有 | 本地已有 .md | 跳过转换，直接进入 enrichment |
 
 **研究与写作分离**：非 `news` 类型的前置研究（代码探索、产品试用、资料搜集）在 article-gen 之外完成。article-gen 从"有素材"开始。
 
 **非 X 链接抓取注意事项**：
 
-抓取非 X/Twitter 的 URL 时，**必须使用 `tavily_extract` 并开启 `include_images: true`**，否则文章中的架构图、流程图等内联图片会丢失。
+抓取非 X/Twitter 的 URL 时，用 `anyweb read` 获取正文，再用 `anyweb eval` 提取页面中的图片 URL：
 
-```python
-# 正确做法
-tavily_extract(urls=["https://..."], include_images=True, format="markdown")
+```bash
+# 1. 获取正文
+anyweb --json read "https://..."
 
-# 错误做法（图片会丢失）
-tavily_extract(urls=["https://..."])  # include_images 默认 false
-anyweb --json read "https://..."  # 不返回图片 URL
+# 2. 提取页面图片（hero image、正文内联图、OG image）
+anyweb open "https://..."
+anyweb eval "JSON.stringify([...document.querySelectorAll('article img, .post img, .blog img, meta[property=\"og:image\"]')].map(e => e.tagName === 'META' ? {src: e.content, alt: 'og-image'} : {src: e.src, alt: e.alt}).filter(i => i.src && !i.src.includes('data:image')))"
+anyweb close
 ```
 
-抓取结果中的图片以 `![alt](url)` 格式出现在 raw content 中。保存文章时：
-1. 保留所有 `![...](...)` 图片引用，插入到正文对应位置
-2. 如果是翻译文章（Step 3），翻译和原文两个部分都要插入图片
-3. 图片 alt text 在翻译部分用中文描述，原文部分保留英文原始 alt
+保存文章时：
+1. 保留所有 `![...](url)` 图片引用，插入到正文对应位置
+2. 如果是翻译文章（Step 3），图片只在 `## 翻译` 部分保留（翻译在前，读者主要看翻译），`## 原文` 部分不重复放图片
 
 ### Step 2: Enrichment
 
@@ -136,7 +142,23 @@ b. **标签**（tags）：1-3 个 category 级标签
 
 c. **摘要**（summary）：3-5 条中文要点
 
-d. **正文生成/重组**：按 `type` 加载推荐正文模板（见下文），根据素材灵活调整
+d. **正文生成/重组**：按 `type` 加载风格参考和正文模板（见下文），根据素材灵活调整
+
+**写作风格约束**（enrichment 正文生成时逐条自检）：
+- 禁止"一句话总结"、"一个类比"、"核心要点"这类格式化小标题，用自然段落过渡
+- 禁止"第一招/第二招/第三招"编号式标题，直接用加粗关键词起段
+- 文章若以名人/热点为 hook，必须先讲他们，再接自己的内容做对照，不能反过来
+- 避免用力过猛的动词（"偷"→"补"/"借鉴"），保持口语化但不刻意
+- 避免总结性套话（"综上所述"、"总而言之"）
+- 不在正文中堆社交指标（赞/转发/浏览量），读者不关心
+- 术语不硬翻：业界通用英文术语保留原文，首次出现括号加中文解释（如 `System Card（模型的出厂安全评估报告）`），之后直接用英文
+- 标题要"事实 + 观点"，一句话，不超过 30 字（news 类型），详见各 type 风格参考
+
+**按 type 加载风格参考**（enrichment 前必读）：
+- `news` → [references/news-style.md](references/news-style.md)（标题结构、正文骨架、语气、配图规则）
+- `notes` → [references/notes-style.md](references/notes-style.md)（个人对照、原话引用、评论区挖掘）
+- `research` → [references/research-style.md](references/research-style.md)（采集流程、采集清单、写作原则）
+- 其他 type 暂无独立风格参考，遵循上方通用约束
 
 e. **扩展字段**：填充当前 type 的扩展字段（有数据就填，没有不强制）
 
@@ -158,13 +180,25 @@ g. 追加 `## 我的笔记` 空节（供后续笔记用）
 
 **执行要点**：这是「重组」操作——将原文移到 `## 原文` 下，翻译放在 `## 翻译` 下，翻译在前。用 Write 工具整体重写文件，不要用 Edit 在末尾追加。
 
-翻译标准：信达雅，专有名词不翻译，技术术语保留英文并括号注中文。
+翻译标准：信达雅，中文为主体。术语处理规则：
+- **括号附英文**：仅限业内讨论时经常直接用英文、不附读者会对不上号的缩写/术语。如 VLA、VLM、world model、foundation model、action head、zero-shot、fine-tune
+- **直接用中文**：中文已经表达清楚、业内人看中文就懂的词。如"预训练"不附 pretraining，"缩放定律"不附 scaling law，"感知"不附 perception，"微调"不附 fine-tune，"联合训练"不附 co-training
+- **格式**：首次出现写"中文（English）"或"English（中文）"（取决于哪个更常用），后续直接用中文
+- **决策方法**：不要看到原文有英文就条件反射地附上。问自己"这个中文会让读者困惑吗？"——不会就不附
+- **普通词一律中文**：evidence→证据、data→数据、goal→目标、method→方法、build→构建、constraint→约束。绝不保留英文
+
+**图片处理**：翻译文章中图片只在 `## 翻译` 部分保留（翻译在前，读者主要看翻译），`## 原文` 部分不重复放图片。
 
 **注意**：`tutorial` 和 `architecture` 中的代码块不翻译。
 
 ### Step 4: 配图
 
-调用 `article-image` skill（cover 模式，quick）：
+**封面图优先级**（按顺序尝试）：
+1. **官方图优先**：如果文章来源有官方 OG image 或 hero 图，直接下载使用（`meta[property="og:image"]`）
+2. **原帖截图**：如果是 X/Twitter 内容，用原帖截图作为封面
+3. **AI 生成**：以上都没有时，调用 `article-image` skill
+
+AI 生成时调用 `article-image` skill（cover 模式，quick）：
 
 ```
 article-image skill:
@@ -173,6 +207,11 @@ article-image skill:
 - category: <从 frontmatter 读取>
 - 调用模式: quick
 ```
+
+**文中截图规则**：
+- **推文截图**：用 x-feed 标准流程（HIDE_JS + `getBoundingClientRect()` + Pillow 动态裁剪），不硬编码坐标
+- **官网截图**：隐藏导航栏和侧边栏后再截，只保留内容区域
+- 截图紧跟对应段落，不堆在文章开头或末尾
 
 `article-image` 会自动完成风格选择 → 生图 → 嵌入文章。
 
@@ -199,6 +238,17 @@ article-image skill:
   d. 向所有用户发送私信（DM）
   e. 报告发送结果（成功/失败数量）
 
+### Step 5.5: Ingest 标记
+
+文章保存后，在 vault 根目录做两处追加：
+
+1. **index.md** 的 `## 待处理` 区域追加一行：
+   - `- [[raw/xxx/文件名.md]] (YYYY-MM-DD)`（news/reference 类型）
+   - `- [[notes/xxx/文件名.md]] (YYYY-MM-DD)`（其他类型）
+
+2. **log.md** 追加：
+   - `## [YYYY-MM-DD] ingest | 文章标题`
+
 ### Step 6: 报告
 
 向用户报告：
@@ -209,65 +259,18 @@ article-image skill:
 - 封面图路径（如生成）
 - 飞书节点信息（如发布）
 
-## 飞书图片上传（Step 5f 详细流程）
+## 飞书图片上传（Step 5f）
 
-飞书 Markdown 导入**不会自动获取外部图片 URL**，导入后显示"无法导入该图片"。文章含 `![](https://...)` 内联图片时，必须在文档导入后手动上传图片。
+文章含外部图片时，飞书导入后需手动上传替换。详细流程见 `feishu` skill 的「文档图片上传」章节。
 
-### 前置条件
-
-- `user_access_token`（UAT）：图片操作必须用 UAT，tenant token 不行。缓存在 `/tmp/feishu_uat.json`，过期自动 refresh
-- `doc_token`：Step 5d 导入后获得的文档 token
-- 已安装 `librsvg`：`brew install librsvg`（SVG 转 PNG 用）
-
-### 完整流程
-
-```python
-# 1. 下载外部图片
-curl -s -o /tmp/img.svg "https://images.ctfassets.net/..."
-
-# 2. SVG 转 PNG（飞书不支持 SVG）
-#    ✅ rsvg-convert -w 1460 input.svg -o output.png  （保持宽高比）
-#    ❌ qlmanage -t -s 1460  （生成正方形缩略图，图片会拉伸）
-rsvg-convert -w 1460 /tmp/img.svg -o /tmp/img.png
-
-# 3. 列出文档所有 blocks，找到 image block（block_type=27）
-GET /docx/v1/documents/{doc}/blocks?page_size=500
-# → 记录每个 image block 的 block_id
-
-# 4. 对每个 image block 执行上传+绑定（需 UAT）
-# 4a. 上传图片（parent_type=docx_image, parent_node=block_id）
-POST /drive/v1/medias/upload_all
-  -F file_name=img.png
-  -F parent_type=docx_image
-  -F parent_node={block_id}    # 必须是 block_id，不是 doc_id
-  -F size={file_size}
-  -F file=@/tmp/img.png
-# → 获得 file_token
-
-# 4b. replace_image 绑定图片到 block
-PATCH /docx/v1/documents/{doc}/blocks/{block_id}
-  {"replace_image": {"token": "{file_token}"}}
-```
-
-### 关键注意事项
-
-- **翻译文章有双倍图片**：翻译和原文两部分各有一组图片 block，需要全部替换
-- **`parent_node` 必须是 block_id**，不是 doc_id，否则 `replace_image` 报 `1770013 relation mismatch`
-- **PNG 格式优先**：飞书支持 PNG/JPG，不支持 SVG/WebP
-- **UAT 获取**：运行 `python3 ~/.claude/skills/feishu/scripts/oauth_server.py` 启动 OAuth，或检查 `/tmp/feishu_uat.json` 缓存是否有效
-- 详细的 UAT 获取和 block API 参考见 `feishu` skill 的「文档图片上传」章节
+**注意**：翻译文章有双倍图片（翻译 + 原文各一组），需全部替换。
 
 ## 推荐正文模板
 
 每种 type 一套推荐章节结构。Claude 根据内容灵活调整——可以合并、拆分、增删章节，但整体骨架尽量贴近模板。
 
 ### news（资讯）
-```
-## 翻译（非中文时）
-## 原文（非中文时）
-## 要点分析
-## 我的笔记
-```
+详见 [references/news-style.md](references/news-style.md) 的「正文结构」。骨架：开头 → 前情/背景 → 面向非专业读者的科普 → 核心内容（数据/能力）→ 多方观点 → 为什么重要。不能假设读者了解专业背景，必须补上下文。
 
 ### architecture（架构分析）
 ```
@@ -299,12 +302,7 @@ PATCH /docx/v1/documents/{doc}/blocks/{block_id}
 ```
 
 ### notes（读书/论文笔记）
-```
-## 核心论点
-## 关键概念
-## 精彩摘录
-## 我的思考
-```
+详见 [references/notes-style.md](references/notes-style.md) 的「正文结构」。骨架：开头 → 他在做什么 → 反直觉的细节 → 我的体系（对比表）→ 我准备补的短板 → 评论区好观点 → 结尾。强调原话引用和个人对照。
 
 ### essay（个人观点）
 ```
@@ -322,6 +320,10 @@ PATCH /docx/v1/documents/{doc}/blocks/{block_id}
 ## 我的笔记
 ```
 
+### research（公司调研）
+无固定模板。详见 [references/research-style.md](references/research-style.md)。
+产品和能力放最前面，按内容自然分段，多引创始人/同行原话。
+
 ### reference（技术参考）
 ```
 ## 翻译（非中文时）
@@ -332,152 +334,7 @@ PATCH /docx/v1/documents/{doc}/blocks/{block_id}
 
 ## Frontmatter 设计
 
-### 核心字段（所有类型共享）
-
-```yaml
----
-title: ""
-author: ""
-type: news              # news/architecture/review/tutorial/notes/essay
-source: ""              # 来源 URL（essay 可为空）
-date: 2026-03-10        # 内容日期
-saved_at: 2026-03-10    # 保存日期
-lang: zh
-category: AI/应用       # 从索引文件选取
-tags: []                # 1-3 个 category 级标签
-summary: []             # 3-5 条中文要点
-status: raw             # raw → enriched → published
-cover: ""               # 封面图路径
-feishu_node_token: ""
-feishu_sync_time: ""
----
-```
-
-### 类型扩展字段
-
-每种 type 有固定的扩展字段，直接平铺在 frontmatter 中（不用 meta 嵌套）。有数据就填，没有不强制。
-
-**news：**
-```yaml
-author_handle: "@mattshumer_"
-likes: 12500
-retweets: 3200
-views: 850000
-```
-
-**architecture：**
-```yaml
-repo_url: "https://github.com/openclaw/openclaw"
-tech_stack:
-  - TypeScript
-  - Node.js
-stars: 15000
-license: MIT
-```
-
-**review：**
-```yaml
-product_name: "Cursor"
-product_url: "https://cursor.com"
-rating: 4               # 1-5
-verdict: "推荐"
-```
-
-**tutorial：**
-```yaml
-difficulty: intermediate  # beginner/intermediate/advanced
-prerequisites:
-  - Node.js 22+
-  - pnpm
-```
-
-**notes：**
-```yaml
-book_title: "Thinking, Fast and Slow"
-book_author: "Daniel Kahneman"
-isbn: "978-0374533557"
-reading_progress: "completed"
-```
-
-**essay：**
-```yaml
-thesis: "独立开发者最大的敌人不是技术，是心态"
-```
-
-**idea：**
-```yaml
-target_user: "独立开发者"
-```
-
-**reference：**
-```yaml
-original_author: "Ryan Lopopolo"
-original_date: "2026-02-11"
-original_site: "OpenAI Blog"
-```
-
-## Frontmatter 完整示例
-
-### news 示例
-
-```yaml
----
-title: "Something Big Is Happening"
-author: "Matt Shumer"
-type: news
-source: "https://x.com/i/status/2021256989876109403"
-date: 2026-02-10
-saved_at: 2026-02-14
-lang: en
-category: AI/发展
-tags:
-  - AI/发展
-  - AI/影响
-summary:
-  - AI 能力在 2026 年 2 月出现质变
-  - GPT-5.3 Codex 和 Opus 4.6 同日发布标志新时代
-  - 1-5 年内 50% 入门级白领工作可能被 AI 取代
-status: enriched
-cover: "Matt Shumer - Something Big Is Happening.png"
-author_handle: "@mattshumer_"
-likes: 12500
-retweets: 3200
-views: 850000
-feishu_node_token: "Mb0BwR45OiJd97k3iAXcYmILndd"
-feishu_sync_time: "2026-03-09T22:00:00+08:00"
----
-```
-
-### architecture 示例
-
-```yaml
----
-title: "OpenClaw 架构解析"
-author: "mixiaomi"
-type: architecture
-source: "https://github.com/openclaw/openclaw"
-date: 2026-03-10
-saved_at: 2026-03-10
-lang: zh
-category: 技术/架构
-tags:
-  - 技术/架构
-  - AI/应用
-summary:
-  - TypeScript ESM 单体仓库，pnpm workspace
-  - 插件化多渠道消息网关架构
-  - 支持 20+ 消息渠道
-status: enriched
-cover: "OpenClaw Architecture.png"
-repo_url: "https://github.com/openclaw/openclaw"
-tech_stack:
-  - TypeScript
-  - Node.js
-  - Vitest
-stars: 15000
-license: MIT
----
-```
+详见 [references/frontmatter.md](references/frontmatter.md)（核心字段、类型扩展字段、完整示例）。
 
 ## 快捷流程示例
 
@@ -531,18 +388,30 @@ ob sync 模式调用 feishu skill 做双向同步。
 | **PPT/幻灯片** | Marp (Markdown slides) | 其他 PPT 方案 |
 | **飞书文档更新** | Block API 原地修改 | 删除重建（没有删除权限） |
 
+**Mermaid 可读性规则**：
+
+- **Sequence diagram 参与者 ≤ 4-5 个**：超过就按阶段拆成 2-3 张小图，底层细节用 `Note` 折叠进上层节点
+- **选对格式**：流向关系（谁调谁）→ Mermaid；对照/比较（问题→方案、工具对比）→ 表格；线性阶段（v1→v2→v3）→ 一行文字 + 分段标题；层次架构 → Mermaid flowchart（控制节点数）
+- Mermaid flowchart 节点内不要放列表或多行文本，Obsidian 会渲染为 "Unsupported markdown"
+
 **Mermaid 发布到飞书注意**：飞书不渲染 Mermaid，导入前用 `mmdc -w 1460 -b white --scale 2` 转 PNG，导入后替换代码块为图片。详见 feishu skill「Mermaid 图表发布到飞书」。
 
 ## 执行检查清单
 
 每篇文章完成后，逐项自检：
 
+- [ ] **Step 2**: 已读对应 type 的风格参考文件（news→news-style.md, notes→notes-style.md）
+- [ ] **Step 2**: 标题符合 type 风格要求（news: 事实+观点一句话≤30字）
+- [ ] **Step 2**: 无社交指标堆砌、无叙事腔、无术语硬翻
+- [ ] **Step 2**: 不假设读者了解专业背景，关键概念有解释或类比
 - [ ] **Step 2**: frontmatter 的 `status` 已从 `raw` → `enriched`
 - [ ] **Step 2**: `category`、`tags`、`summary` 已填充
 - [ ] **Step 2**: 末尾有 `## 我的笔记` 空节
-- [ ] **Step 1**: 非 X 链接抓取时使用了 `include_images: true`，图片已插入正文对应位置
+- [ ] **Step 1**: 非 X 链接用 `anyweb read` 抓取正文，用 `anyweb eval` 提取图片 URL
 - [ ] **Step 3**: 非中文文章的正文结构是 `## 翻译` → `## 原文`（翻译在前）
 - [ ] **Step 3**: 不是在末尾追加翻译，而是整体重组了文件
-- [ ] **Step 3**: 翻译和原文两部分都包含了原文中的内联图片
+- [ ] **Step 3**: 图片只在 `## 翻译` 部分保留（读者主要看翻译），原文部分不重复
+- [ ] **存储**: news/reference 存入 raw/，其他类型存入 notes/
 - [ ] **Step 5**: 飞书发布后已回写 `feishu_node_token` 和 `feishu_sync_time`
 - [ ] **格式**: 流程图用 Mermaid，不是 ASCII art
+- [ ] **图片位置**: 每张图片（`![[]]`）紧跟其描述的段落，不要堆在文章开头或末尾

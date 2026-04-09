@@ -6,7 +6,17 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 
 # Obsidian 知识库管理
 
-管理 `~/Documents/obsidian/mixiaomi` vault 的检索、综合、洞察、浏览、飞书同步和待办操作。
+单一 vault 的检索、综合、洞察、浏览、飞书同步和待办操作。
+
+**Vault**: `~/Documents/obsidian/mixiaomi`
+
+| 层 | 目录 | 定位 |
+|----|------|------|
+| **raw/** | `raw/` | 外部文章（抓取、剪藏、转载） |
+| **notes/** | `notes/` | 个人笔记（洞察、点子、待办） |
+| **wiki/** | `wiki/` | LLM 编译的概念页（知识图谱） |
+
+关键文件：`index.md`（wiki 导航索引）、`AGENTS.md`（schema 定义）
 
 **前置条件**: Obsidian 应用必须正在运行。CLI 命令统一前缀：
 ```bash
@@ -45,17 +55,23 @@ export PATH="$PATH:/Applications/Obsidian.app/Contents/MacOS" && obsidian <comma
 
 ### 1.2 本地搜索策略
 
+**搜索三个层**（raw + notes + wiki），结果用 `[raw]`、`[notes]`、`[wiki]` 标注来源。
+
+**查询策略**：先读 `index.md` 找相关 wiki 页，再读原文。Wiki 页提供概念概览和交叉引用，能快速定位相关的 raw/notes 文件。
+
 **优先使用 Obsidian CLI**（利用 Obsidian 索引，比 Grep 更快更准）：
 
 ```bash
-# 关键词搜索（全文）
+# 搜索整个 vault
 obsidian search query="Agent"
 
 # 带上下文的搜索（显示匹配行）
 obsidian search:context query="Agent"
 
-# 限定目录搜索
-obsidian search query="Agent" path="行业资讯"
+# 限定目录搜索（按层过滤）
+obsidian search query="Agent" path="raw"
+obsidian search query="Agent" path="notes"
+obsidian search query="Agent" path="wiki"
 
 # 按标签查找
 obsidian tags                          # 列出所有标签
@@ -67,10 +83,14 @@ obsidian property:read name="category" file="文件名"
 
 # 查看文件内容
 obsidian read file="文件名"
-obsidian read path="行业资讯/AI/某文章.md"
+obsidian read path="raw/AI/某文章.md"
 ```
 
 **降级到 Grep**（仅当 CLI 不可用或需要正则匹配时）：
+
+```bash
+Grep "关键词" path="~/Documents/obsidian/mixiaomi"
+```
 
 | 搜索方式 | Grep 模式 | 场景 |
 |---------|-----------|------|
@@ -96,12 +116,12 @@ obsidian read path="行业资讯/AI/某文章.md"
    摘要（frontmatter summary 或正文前 50 字）
 ```
 
-来源标注：`[本地]` / `[飞书]`
+来源标注：`[raw]` / `[notes]` / `[wiki]` / `[飞书]`
 
 表格形式汇总：
 
-| 标题 | 目录 | 分类 | 日期 | 来源 |
-|------|------|------|------|------|
+| 标题 | 层 | 目录 | 分类 | 日期 | 来源 |
+|------|-----|------|------|------|------|
 
 ---
 
@@ -421,6 +441,36 @@ status: raw
 ```
 
 创建后在 `待办看板.md` 的 `## 活跃项目` 下追加 `- [[<项目名>待办]]`
+
+---
+
+## 7. 输出回流
+
+search 或 synthesize 完成后，主动询问用户："要回流到知识库吗？" 提供三个选项：
+
+### 选项 A：追加到现有文章
+
+在相关文章（raw/ 或 notes/）的 `## 我的笔记` 区域追加（如无此区域则创建）：
+
+```markdown
+> [YYYY-MM-DD] 通过 ob 搜索发现：<结论摘要>
+```
+
+使用 Edit 工具精确插入到 `## 我的笔记` 末尾。
+
+### 选项 B：回流到 wiki 页
+
+将结论更新到 `wiki/` 中对应的概念页：
+
+1. 读 `index.md` 找到相关 wiki 页
+2. Edit 更新 wiki 页内容（追加新发现、修正过时信息）
+3. 在 `wiki/log.md` 追加变更记录：`- [YYYY-MM-DD] 更新 [[概念页名]]：<变更摘要>`
+
+如相关 wiki 页不存在，提示用户是否创建新 wiki 页。
+
+### 选项 C：生成新文章
+
+调用 `article-gen` skill，使用 notes 或 essay 类型，将搜索/综合结果作为输入内容。
 
 ---
 

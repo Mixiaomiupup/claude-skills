@@ -8,36 +8,55 @@ description: 发布文章到微信公众号（智涌MindSurge）。通过系统C
 ## 1. 架构概述
 
 ```
-系统Chrome(CDP:9222) → 用户登录 → 获取Cookie/Token
+anyweb --chrome → Chrome扩展 → 系统Chrome → 用户登录 → 获取Cookie/Token
     → 上传图片(API) → 创建/更新草稿(API) → 发表(CDP页面操作+扫码)
 ```
 
-**为什么用系统 Chrome 而不是 Playwright/anyweb？** 微信后台检测自动化浏览器，Playwright 即使用 `channel="chrome"` 也会被识别，页面渲染空白。必须用用户自己的系统 Chrome 开启远程调试。
+**为什么用系统 Chrome？** 微信后台检测自动化浏览器，Playwright 即使用 `channel="chrome"` 也会被识别，页面渲染空白。`anyweb --chrome` 通过 Chrome 扩展连接系统 Chrome，与用户正常使用的浏览器完全一致，不会被检测。
 
-## 2. 启动浏览器与连接
+## 2. 连接浏览器
 
-### 2.1 启动系统 Chrome
+### 2.1 使用 anyweb --chrome（推荐）
 
 ```bash
+# 首次安装扩展
+anyweb --chrome doctor
+
+# 打开微信后台（复用系统 Chrome，无需重启）
+anyweb --chrome open "https://mp.weixin.qq.com/"
+```
+
+**优势**：不需要重启 Chrome、不需要 `--remote-debugging-port=9222`，扩展自动连接。
+
+### 2.2 anyweb --chrome 常用操作
+
+```bash
+# 导航
+anyweb --chrome open "URL"
+
+# 执行 JS（等价于 CDP Runtime.evaluate）
+anyweb --chrome eval "document.title"
+
+# 截图
+anyweb --chrome screenshot
+
+# 页面状态
+anyweb --chrome state --ax
+```
+
+### 2.3 需要原始 CDP 的操作（回退）
+
+以下操作超出 anyweb CLI 能力，仍需通过 `--remote-debugging-port=9222` 直接连接：
+- `DOM.setFileInputFiles`（视频上传文件注入）
+- `Network.getCookies`（获取 httpOnly cookie）
+
+回退时启动方式：
+```bash
+# 先完全退出 Chrome，再用调试端口启动
 open -a "Google Chrome" --args --remote-debugging-port=9222
 ```
 
-如果 Chrome 已经打开，需要先完全退出再用上述命令启动，否则 `--remote-debugging-port` 不生效。
-
-### 2.2 验证 CDP 连接
-
-```bash
-curl -s http://localhost:9222/json | python3 -c "
-import sys,json
-tabs=json.load(sys.stdin)
-for t in tabs:
-    print(f'{t[\"title\"][:50]} | {t[\"url\"][:80]}')
-"
-```
-
-### 2.3 CDP 通信模板
-
-所有页面操作通过 WebSocket + `websockets` 库：
+CDP 通信模板（仅在需要原始 CDP 时使用）：
 
 ```python
 import asyncio, json, websockets, urllib.request
@@ -246,6 +265,7 @@ https://x.com/example/status/123456
 | **图片加 max-width:100%** | 防止图片溢出手机屏幕 |
 | **不要用 text-align:justify** | 移动端会导致字间距异常放大 |
 | **有视频不截图** | 推文已有视频下载的，跳过该推文截图，视频比截图更有信息量 |
+| **推文截图裁剪** | 截取 X 推文时：1) JS 隐藏左侧导航栏和右侧趋势栏（`display:none`）；2) 截图后用 Python PIL 裁剪，只保留正文区域（约 x=130 到 x=880，750px 宽）；3) 不要截完整浏览器窗口 |
 | **视频用 marker 定位** | HTML 中在对应位置放占位符，插入视频前设置光标到 marker 处（见 4b.6） |
 | **不加数据来源 footer** | 文章末尾不要放"数据来源: Grok Search..."等 meta 信息 |
 
@@ -388,7 +408,7 @@ hover 后 "改" 按钮位于行右侧中间位置（3个按钮中第2个）
 | 图片不显示 | 使用了外部图片 URL | 先上传到微信 CDN |
 | 链接点不了 | 微信过滤外链 | 展示为纯文本 URL |
 | API 发布返回 ret=2 | 需要扫码验证 | 通过 CDP 页面操作发布 |
-| Playwright 页面空白 | 微信检测自动化浏览器 | 用系统 Chrome + CDP |
+| Playwright 页面空白 | 微信检测自动化浏览器 | 用 `anyweb --chrome`（推荐）或系统 Chrome + CDP |
 | JS 变量名冲突 | CDP 多次执行同一页面 | 用 IIFE 包裹 |
 | 视频全堆在文章开头/末尾 | 未用 marker 定位，视频插入到默认光标位置 | 用 marker 占位符技术（见 4b.6） |
 | 视频封面选不了 | 缩略图未加载就点击 | 等 15 秒 + 重试循环（见 4b.4） |

@@ -57,7 +57,17 @@ description: "跨平台内容分析和话题调研。给链接时自动分析内
 
 1. 从 URL 识别平台
 2. `anyweb --json read "URL"` 获取内容（自动识别平台）
-3. **检查截断**：如果返回内容末尾有 `... (truncated)` 或明显缺少文章后半部分（对照目录检查），说明页面使用了懒加载。降级到原子命令：
+3. **检查截断**：如果返回内容末尾有 `... (truncated)` 或明显缺少文章后半部分（对照目录检查），说明页面使用了懒加载。按优先级降级：
+   
+   **方案 A (推荐): AX Tree** — 滚动加载后用 AX tree 获取完整文本：
+   ```bash
+   anyweb open "URL"
+   anyweb scroll down --amount 15000
+   anyweb state --ax
+   ```
+   AX tree 天然包含所有已渲染的文本节点（包括懒加载后的内容），且带结构信息（heading、paragraph、link URL），不需要额外等待。
+   
+   **方案 B (回退): eval get text** — 当 AX tree 不可用时：
    ```bash
    anyweb open "URL"
    anyweb scroll down --amount 15000
@@ -258,6 +268,15 @@ anyweb --json search <platform> "<query>" --limit 10
 
 ---
 
+## 输出回流
+
+分析完成后，询问用户："要保存分析结论到知识库吗？"
+
+- **追加到现有文章**：如果分析与某篇已有文章直接相关，追加到该文章的 `## 我的笔记` 下，格式：`> [YYYY-MM-DD] analyze 调研「XX话题」：<结论摘要>`
+- **生成新文章**：走 `article-gen` skill（notes 或 essay 类型）
+
+不要静默写入，必须确认后操作。
+
 ## 错误处理
 
 | 场景 | 处理 |
@@ -265,5 +284,5 @@ anyweb --json search <platform> "<query>" --limit 10
 | 浏览器平台会话过期 | 提示用户：`anyweb --headed login <platform>` → 重试 |
 | 搜索结果为空 | 建议用户换关键词 |
 | 单篇读取失败 | 跳过该篇，在输出中标注 "[不可访问]" |
-| 内容截断（懒加载） | 降级到原子命令：open → scroll → get text |
+| 内容截断（懒加载） | 降级：open → scroll → `state --ax`（推荐）或 `get text`（回退） |
 | Research 成功读取 < 2 篇 | 降级为单篇摘要模式 |

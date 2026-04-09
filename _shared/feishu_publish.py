@@ -82,6 +82,188 @@ def _preprocess_markdown(md_path):
     return content
 
 
+def _preprocess_markdown_with_external_images(md_path):
+    """Preprocess markdown that contains external URL images (e.g. from WeChat articles).
+
+    Unlike _preprocess_markdown (for Obsidian local images), this handles ![alt](https://...)
+    format and extracts them as IMG_PLACEHOLDER_N markers.
+
+    Returns:
+        (cleaned_content, image_list) where image_list is
+        [{"url": "...", "alt": "...", "marker": "IMG_PLACEHOLDER_N"}]
+    """
+    with open(os.path.expanduser(md_path), "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Remove YAML frontmatter
+    content = re.sub(r"^---\n.*?\n---\n", "", content, count=1, flags=re.DOTALL)
+    # Remove Obsidian local images
+    content = re.sub(r"!\[\[.*?\]\]", "", content)
+    # Convert wikilinks to plain text
+    content = re.sub(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]", lambda m: m.group(2) or m.group(1), content)
+    # Remove [toc]
+    content = re.sub(r"^\[toc\]\s*$", "", content, flags=re.MULTILINE | re.IGNORECASE)
+
+    # Extract external images
+    images = []
+    lines = content.split("\n")
+    cleaned = []
+    for line in lines:
+        m = re.match(r"!\[([^\]]*)\]\((https?://[^)]+)\)", line.strip())
+        if m:
+            marker = f"IMG_PLACEHOLDER_{len(images)}"
+            images.append({"url": m.group(2), "alt": m.group(1), "marker": marker})
+            cleaned.append(f"\n{marker}\n")
+        else:
+            cleaned.append(line)
+
+    return "\n".join(cleaned), images
+
+
+def insert_external_url_images(token, doc_token, images):
+    """Download external images by URL and insert into document, replacing placeholder blocks.
+
+    Uses robust block matching (refreshes block list each iteration, joins text_runs).
+
+    Args:
+        token: Feishu tenant access token.
+        doc_token: Target document token.
+        images: List of {"url": "...", "alt": "...", "marker": "IMG_PLACEHOLDER_N"}.
+
+    Returns:
+        Number of images successfully inserted.
+    """
+    if not images:
+        return 0
+
+    inserted = 0
+    # Process from back to front to preserve indices
+    for img_info in reversed(images):
+        marker = img_info["marker"]
+        url = img_info["url"]
+
+        # Refresh block list each iteration
+        blocks = _list_all_blocks(token, doc_token)
+        page_block = blocks[0]
+        page_children_ids = page_block.get("children", [])
+        block_map = {b["block_id"]: b for b in blocks}
+
+        # Find marker by joining text_runs (handles Feishu splitting text)
+        target_idx = None
+        for i, child_id in enumerate(page_children_ids):
+            block = block_map.get(child_id, {})
+            text = _get_block_text(block)
+            if marker in text:
+                target_idx = i
+                break
+
+        if target_idx is None:
+            print(f"[feishu] WARN: {marker} not found, skip")
+            continue
+
+        # Detect extension from URL
+        if "wx_fmt=jpeg" in url or "wx_fmt=jpg" in url:
+            ext = "jpg"
+        elif "wx_fmt=png" in url:
+            ext = "png"
+        elif "wx_fmt=gif" in url:
+            ext = "gif"
+        else:
+            raw_ext = url.rsplit(".", 1)[-1].split("?")[0].split("/")[0][:4]
+            ext = raw_ext if raw_ext in ("jpg", "jpeg", "png", "gif", "webp") else "png"
+        local_path = f"/tmp/feishu_img_{marker}.{ext}"
+
+        # Download image
+        subprocess.run(["curl", "-s", "-o", local_path, url], check=False)
+        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+            print(f"[feishu] WARN: download failed for {marker}, skip")
+            continue
+
+        # Delete placeholder block
+        _curl_json([
+            "-X", "DELETE",
+            f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_token}"
+            f"/blocks/{page_block['block_id']}/children/batch_delete",
+            "-H", f"Authorization: Bearer {token}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps({"start_index": target_idx, "end_index": target_idx + 1}),
+        ])
+        time.sleep(0.5)
+
+        # Insert image using 3-step method
+        if _insert_image_block(token, doc_token, page_block["block_id"], local_path, index=target_idx):
+            inserted += 1
+            fsize = os.path.getsize(local_path)
+            print(f"[feishu] ✓ {marker} ({fsize} bytes)")
+        else:
+            print(f"[feishu] WARN: insert failed for {marker}")
+
+        # Cleanup temp file
+        try:
+            os.unlink(local_path)
+        except OSError:
+            pass
+        time.sleep(0.5)
+
+    # Clean up any remaining IMG_PLACEHOLDER blocks
+    blocks = _list_all_blocks(token, doc_token)
+    for block in blocks:
+        text = _get_block_text(block)
+        if re.search(r"IMG_PLACEHOLDER_\d+", text):
+            _delete_block(token, doc_token, block["block_id"])
+            print(f"[feishu] Cleaned up residual placeholder: {text.strip()}")
+
+    return inserted
+
+
+def publish_article_to_feishu(md_path, doc_title, wiki_parent_node):
+    """Publish a markdown article with external URL images to Feishu wiki.
+
+    Simplified interface for chat-digest and similar use cases where:
+    - Images are external URLs (not local files)
+    - No card broadcast needed
+    - No frontmatter writeback needed
+
+    Args:
+        md_path: Path to markdown file with ![alt](url) images.
+        doc_title: Document title.
+        wiki_parent_node: Parent wiki node token.
+
+    Returns:
+        dict with doc_token, node_token, doc_url, images_inserted.
+    """
+    app_id, app_secret = _get_feishu_credentials()
+    token = _get_tenant_token(app_id, app_secret)
+
+    # Preprocess: extract external images as placeholders
+    content, images = _preprocess_markdown_with_external_images(md_path)
+    print(f"[feishu] Preprocessed: {len(content)} chars, {len(images)} images")
+
+    # Upload and import
+    filename = f"article_{int(time.time())}.md"
+    file_token = _upload_md_file(token, content, filename)
+    print(f"[feishu] Uploaded: {file_token}")
+
+    doc_token = _import_as_docx(token, file_token, doc_title)
+    print(f"[feishu] Imported: {doc_token}")
+
+    # Move to wiki
+    node_token = _move_to_wiki(token, doc_token, wiki_parent_node)
+    doc_url = f"https://huazhi-ai.feishu.cn/docx/{doc_token}"
+    print(f"[feishu] Published: {doc_url}")
+
+    # Insert external images
+    images_inserted = insert_external_url_images(token, doc_token, images)
+    print(f"[feishu] Images: {images_inserted}/{len(images)} inserted")
+
+    return {
+        "doc_token": doc_token,
+        "node_token": node_token,
+        "doc_url": doc_url,
+        "images_inserted": images_inserted,
+    }
+
+
 def _upload_md_file(token, content, filename):
     """Upload markdown content as a file to Feishu drive."""
     tmp_path = f"/tmp/{filename}"

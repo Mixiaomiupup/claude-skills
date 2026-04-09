@@ -63,7 +63,7 @@ curl -s -X PATCH "https://open.feishu.cn/open-apis/docx/v1/documents/$DOC/blocks
 
 **正确做法**：预处理时去掉外部图片 → 导入 → 对每张图片执行 create+upload+replace（尺寸自动正确）。
 
-`scripts/feishu_publish.py` 已内置此流程。
+`_shared/feishu_publish.py` 的 `publish_article_to_feishu()` 和 `publish_to_feishu()` 已内置此流程。
 
 ## Mermaid 发布到飞书
 

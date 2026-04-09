@@ -137,7 +137,7 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 
 ```
 日报生成 → 封面图(gemini-image + Pillow文字叠加) → 推文截图(anyweb + Pillow裁切)
-    → 嵌入Obsidian(attachments/) → 飞书发布(feishu_publish.py)
+    → 嵌入Obsidian(attachments/) → 飞书发布(_shared/feishu_publish.py)
     → 图片插入飞书文档(3-step: 创建空block → upload parent_node=block_id → PATCH replace_image)
     → 卡片广播(全员私信)
 ```

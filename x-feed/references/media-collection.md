@@ -53,18 +53,23 @@ python3 ~/.claude/skills/gemini-image/scripts/gemini_image.py generate "<prompt>
 // 返回：JSON.stringify(articles[0].getBoundingClientRect())
 ```
 
-### Pillow 裁切：先检测 devicePixelRatio
+### Pillow 裁切 — 必须用 HIDE_JS 返回的 bounds
+
+**⚠️ 绝对禁止硬编码裁切坐标（如 x=130、x=200）。** 隐藏侧边栏后 article 的实际位置取决于 viewport 宽度和 CSS 布局，每次都可能不同。唯一可靠的坐标来源是 HIDE_JS 返回的 `getBoundingClientRect()`。
 
 ```bash
-# 1. 获取实际 viewport 和 dpr
-anyweb eval 'JSON.stringify({dpr: window.devicePixelRatio, vw: window.innerWidth})'
-# 典型结果: {"dpr":1,"vw":1536}
+# 1. 获取 dpr（一次即可，所有页面共用）
+anyweb eval --page tw1 'JSON.stringify({dpr: window.devicePixelRatio, vw: window.innerWidth})'
+# 典型结果: {"dpr":1,"vw":1440}
 ```
 
 ```python
-# 2. 用 dpr 计算缩放因子，不要硬编码 viewport 宽度
-#    错误写法: scale = img.width / 1280  ← 猜测的值，会导致裁切偏移
-#    正确写法:
+# 2. HIDE_JS 返回的 bounds 是唯一裁切依据
+#    bounds = {"left":216,"top":53,"right":834,"bottom":537.5}
+#
+#    ❌ 错误: scale = img.width / 1280; left = 130 * scale
+#    ❌ 错误: left = 130（硬编码像素值）
+#    ✅ 正确: 直接用 bounds 坐标 × dpr
 scale = dpr  # dpr=1 时坐标直接映射，dpr=2 时坐标 ×2
 left = max(0, int(bounds['left'] * scale) - 5)
 top = max(0, int(bounds['top'] * scale) - 5)
@@ -73,7 +78,12 @@ bottom = min(img.height, int(bounds['bottom'] * scale) + 15)
 cropped = img.crop((left, top, right, bottom))
 ```
 
-**已知坑**：anyweb 默认 viewport 为 1536x864（非 1280），且 dpr=1。如果用 `img.width / 1280` 算 scale 会得到 1.2，导致所有坐标右移 20%。
+**裁切后自检**：裁切完第一张图后立即用 Read 工具查看，确认：
+1. 左侧能看到用户头像和用户名（不是从文字中间截断）
+2. 右侧没有大片空白
+3. 底部能看到互动数据（likes/retweets）
+
+如果第一张不对，停下来检查 bounds 和 dpr，不要继续裁剪剩余图片。
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: server
-description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to cloud/remote machines. Also use when deploying projects, checking server status, or managing services. Machines are called 云机 (cloud), U机 (Ubuntu), W机 (Windows).
+description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to cloud/remote machines. Also use when deploying projects, checking server status, or managing services. Machines are called 云机 (cloud), 大机 (big ECS), U机 (Ubuntu), W机 (Windows).
 ---
 
 # Machines Overview
@@ -8,6 +8,7 @@ description: Use when user mentions server, deployment, remote access, SSH, or n
 | 代号 | 角色 | Access |
 | ---- | ---- | ------ |
 | **云机** | Web 托管, frps 中继 | `ssh root@YOUR_SERVER_IP` |
+| **大机** | 高性能计算 (32C/245G) | `sshpass -p 'Huazhiai123' ssh root@8.147.115.151` |
 | **U机** | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
 | **W机** | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` (via frp) |
 
@@ -127,7 +128,60 @@ sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 
 ---
 
-# 2. U机（Ubuntu 工作站，via frp）
+# 2. 大机（Aliyun ECS 高性能实例）
+
+China North 2 (Beijing) Ubuntu ECS instance, 32核高性能机器。
+
+## Connection
+
+| Field      | Value                                              |
+| ---------- | -------------------------------------------------- |
+| Host       | `8.147.115.151`                                    |
+| Private IP | `172.25.63.72`                                     |
+| User       | `root`                                             |
+| Password   | `Huazhiai123`                                      |
+| SSH        | `sshpass -p 'Huazhiai123' ssh root@8.147.115.151`  |
+
+## Specs
+
+| Item          | Detail                             |
+| ------------- | ---------------------------------- |
+| Instance ID   | `i-2ze8v3zn0e4m92zqhc01`          |
+| OS            | Ubuntu 22.04 64位                  |
+| Kernel        | 5.15.0-173-generic                 |
+| CPU           | 32 vCPU (x86_64)                   |
+| Memory        | 245 GiB                            |
+| Disk          | 40 GiB                             |
+| Bandwidth     | 1 Mbps                             |
+| Expires       | 2026-05-03                         |
+| Region        | 华北2（北京）                       |
+
+## Deployed Projects
+
+| Project | Web Root | Port |
+| ------- | -------- | ---- |
+| (暂无)  | -        | -    |
+
+## Common Operations
+
+```bash
+# SSH connect
+sshpass -p 'Huazhiai123' ssh -o StrictHostKeyChecking=no root@8.147.115.151
+
+# Run remote command
+sshpass -p 'Huazhiai123' ssh root@8.147.115.151 "command here"
+```
+
+## Notes
+
+- 32核 245GB 内存，适合大规模计算任务
+- 磁盘仅 40GB，如需更多空间需挂载数据盘
+- 公网带宽 1Mbps，传输大文件较慢
+- 新实例，环境待初始化
+
+---
+
+# 4. U机（Ubuntu 工作站，via frp）
 
 无公网 IP 的内网机器，通过 frp 穿透访问。适合跑 headless Chrome 采集等重计算任务。
 
@@ -216,7 +270,7 @@ sudo systemctl status frpc
 
 ---
 
-# 3. W机（Windows 工作站，via frp）
+# 5. W机（Windows 工作站，via frp）
 
 无公网 IP 的内网 Windows 机器，通过 frp 穿透访问。
 

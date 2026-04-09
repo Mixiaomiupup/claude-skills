@@ -71,6 +71,8 @@ robotics_company:
   - FourierRobots     # 傅利叶智能
   - GalbotRobotics    # 银河通用
   - UBTECHRobotics    # 优必选
+  - GeneralistAI      # Generalist AI 官方
+  - SkildAI           # Skild AI 官方
 
 # === 具身智能/机器人 — 明星开发者 ===
 robotics_dev:
@@ -100,6 +102,9 @@ robotics_dev:
   - wenlong_huang     # Stanford 博士, 机器人基础模型
   - hausman_k         # DeepMind 机器人研究
   - ericjang11        # 前 Google Brain 机器人
+  - peteflorence      # Generalist AI CEO, 前 DeepMind, VLA 共同发明人
+  - pathak2206        # Skild AI CEO, CMU 教授, 具身 AI
+  - abhiguptaio       # Skild AI 联创/总裁, CMU 教授, 机器人视觉
 
 # === 中文开发者/KOL ===
 cn_dev:

@@ -11,6 +11,8 @@ Orchestrate existing tools to manage Twitter information flow: discover accounts
 
 **Prerequisite**: anyweb must be installed (`pip install -e ~/projects/anyweb` or `pip install anyweb`). Verify with `anyweb doctor`.
 
+**Chrome 模式（必须使用）**：所有 anyweb 命令加 `--chrome` 标志，连接系统 Chrome 复用 X 登录态。不要用 Playwright 模式（需要单独登录且容易被检测）。首次使用需安装扩展：`anyweb --chrome doctor`。
+
 ---
 
 ## Mode Router
@@ -33,11 +35,11 @@ Expand follow matrix by finding valuable accounts.
 Use anyweb atomic commands to interact with Grok. The daemon keeps page state between commands.
 
 ```bash
-anyweb open "https://x.com/i/grok?new=true"
-anyweb wait selector "textarea" --timeout 15000
-anyweb click "textarea"
-anyweb type "AI programming leaders worth following on Twitter. Include tweet URLs."
-anyweb keys Enter
+anyweb --chrome open "https://x.com/i/grok?new=true"
+anyweb --chrome wait selector "textarea" --timeout 15000
+anyweb --chrome click "textarea"
+anyweb --chrome type "AI programming leaders worth following on Twitter. Include tweet URLs."
+anyweb --chrome keys Enter
 # Wait for response — use observer pattern (see Digest Mode Step 1)
 ```
 
@@ -46,7 +48,7 @@ For multiple queries, use `--page` for parallel execution (see Digest Mode Step 
 ### Method B: Seed Cross-Analysis (deep)
 
 1. **Select seeds** from `references/core_accounts.yaml` `discover_seeds` list
-2. **Fetch following lists**: `anyweb --json read "https://x.com/{seed}/following"`
+2. **Fetch following lists**: `anyweb --chrome --json read "https://x.com/{seed}/following"`
 3. **Cross-reference** — find accounts followed by multiple seeds
 4. **Rank** by `overlap_count` descending
 
@@ -87,29 +89,56 @@ Generate a daily Twitter digest of hot content.
 
 ```bash
 # Phase 1: Open pages (first must be serial to start daemon)
-anyweb open --page grok1 "https://x.com/i/grok?new=true"
-anyweb open --page grok2 "https://x.com/i/grok?new=true" &
-anyweb open --page grok3 "https://x.com/i/grok?new=true" &
-anyweb open --page grok4 "https://x.com/i/grok?new=true" &
+anyweb --chrome open --page grok1 "https://x.com/i/grok?new=true"
+anyweb --chrome open --page grok2 "https://x.com/i/grok?new=true" &
+anyweb --chrome open --page grok3 "https://x.com/i/grok?new=true" &
+anyweb --chrome open --page grok4 "https://x.com/i/grok?new=true" &
 wait
 
 # Phase 2: Wait for textareas
-anyweb wait --page grok1 selector "textarea" --timeout 15000 &
+anyweb --chrome wait --page grok1 selector "textarea" --timeout 15000 &
 # ... (同理 grok2/3/4)
 wait
 
 # Phase 3: Submit queries (headless, no focus competition)
-(anyweb click --page grok1 "textarea" && anyweb type --page grok1 "<Round 1>" && anyweb keys --page grok1 Enter) &
+(anyweb --chrome click --page grok1 "textarea" && anyweb --chrome type --page grok1 "<Round 1>" && anyweb --chrome keys --page grok1 Enter) &
 # ... (同理 grok2/3/4)
 wait
 
-# Phase 4: Wait for responses (observer pattern)
-anyweb eval --page grok1 '<OBSERVER_JS>' > /tmp/grok1.txt &
+# Phase 4: Wait for responses + read content
+# 方案 A (推荐): AX Tree 轮询 — 用 state --ax 检测完成信号并读取内容
+# 1. 轮询检测完成：AX tree 中出现 "Copy text" 按钮 = 回答完成
+#    while true; do
+#      anyweb --chrome state --page grok1 --ax -i 2>/dev/null | grep -q '"Copy text"' && break
+#      sleep 3
+#    done
+# 2. 读取完整回答：AX tree 包含所有 StaticText 节点，即 Grok 全文
+#    anyweb --chrome state --page grok1 --ax > /tmp/grok1.txt
+
+# 方案 B (回退): JS Observer — 当 AX tree 不可用时
+anyweb --chrome eval --page grok1 '<OBSERVER_JS>' > /tmp/grok1.txt &
 # ... (同理 grok2/3/4)
 wait
 ```
 
-**Observer JS** — 检测 `aria-label="Copy text"` 按钮出现（Grok 回答完成的确定性信号）：
+**方案 A: AX Tree 轮询（推荐）**
+
+AX tree 的 `state --ax -i`（interactive-only）输出中包含所有按钮的 `aria-label`。检测 `"Copy text"` 按钮出现即表示 Grok 回答完成。完成后用 `state --ax` 获取全文，AX tree 的 StaticText 节点包含 Grok 完整回答（含 URL、列表结构）。
+
+```bash
+# 轮询检测完成（每 3 秒，超时 180 秒）
+for i in $(seq 1 60); do
+  sleep 3
+  anyweb --chrome state --page grok1 --ax -i 2>/dev/null | grep -q '"Copy text"' && break
+done
+
+# 读取 Grok 完整回答
+anyweb --chrome state --page grok1 --ax > /tmp/grok1.txt
+```
+
+**优势**：不需要复杂 JS Promise；AX tree 天然包含结构化文本（标题、列表、链接 URL），信息量比 `main.innerText` 更丰富。
+
+**方案 B: JS Observer（回退）** — 检测 `aria-label="Copy text"` 按钮出现：
 ```javascript
 new Promise(resolve => { const start = Date.now(); const check = () => { const elapsed = Math.floor((Date.now() - start) / 1000); const btns = document.querySelectorAll("button"); let hasCopy = false; for (const b of btns) { if (b.getAttribute("aria-label") === "Copy text" && b.offsetHeight > 0) { hasCopy = true; break; } } if (hasCopy && elapsed > 15) { const main = document.querySelector("main"); resolve(main ? main.innerText.substring(0, 15000) : "no main"); } else if (elapsed > 180) { const main = document.querySelector("main"); resolve("[TIMEOUT] " + (main ? main.innerText.substring(0, 15000) : "no main")); } else { setTimeout(check, 3000); } }; setTimeout(check, 10000); })
 ```
@@ -171,6 +200,8 @@ Flag any tweets that contain demo videos with [VIDEO].
 - 每次 `?new=true` 开新对话
 - 必须在每个问题中加 "Include tweet URLs"
 - 用 `anyweb log` 排查操作失败
+- **推荐用 AX Tree 读取 Grok 回答**：`state --ax` 返回结构化文本（含 URL），比 `eval main.innerText` 信息更完整
+- **AX Tree 完成检测**：`state --ax -i | grep "Copy text"` 替代复杂 JS observer，更简洁可靠
 
 **低新闻量降级策略**：如果 4 轮 Grok 中有 2 轮以上返回"No major announcements"或有效新闻条目不足 3 条，执行以下降级：
 1. 扩大 Core Account 扫描范围：从 8-15 个增加到 20-30 个
@@ -184,16 +215,16 @@ Flag any tweets that contain demo videos with [VIDEO].
 
 ```bash
 # Batch 1: 5 accounts in parallel
-anyweb --json read "https://x.com/AnthropicAI" > /tmp/ca_AnthropicAI.json &
-anyweb --json read "https://x.com/OpenAI" > /tmp/ca_OpenAI.json &
-anyweb --json read "https://x.com/karpathy" > /tmp/ca_karpathy.json &
-anyweb --json read "https://x.com/DrJimFan" > /tmp/ca_DrJimFan.json &
-anyweb --json read "https://x.com/dotey" > /tmp/ca_dotey.json &
+anyweb --chrome --json read "https://x.com/AnthropicAI" > /tmp/ca_AnthropicAI.json &
+anyweb --chrome --json read "https://x.com/OpenAI" > /tmp/ca_OpenAI.json &
+anyweb --chrome --json read "https://x.com/karpathy" > /tmp/ca_karpathy.json &
+anyweb --chrome --json read "https://x.com/DrJimFan" > /tmp/ca_DrJimFan.json &
+anyweb --chrome --json read "https://x.com/dotey" > /tmp/ca_dotey.json &
 wait
 
 # Batch 2: next 5 accounts
-anyweb --json read "https://x.com/Figure_robot" > /tmp/ca_Figure_robot.json &
-anyweb --json read "https://x.com/cursor_ai" > /tmp/ca_cursor_ai.json &
+anyweb --chrome --json read "https://x.com/Figure_robot" > /tmp/ca_Figure_robot.json &
+anyweb --chrome --json read "https://x.com/cursor_ai" > /tmp/ca_cursor_ai.json &
 # ... continue with remaining accounts
 wait
 
@@ -226,7 +257,7 @@ tavily_search(query="AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI
 **仅当 Grok 有效结果不足 5 条时执行**，作为补充搜索：
 
 ```bash
-anyweb --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI" --limit 10
+anyweb --chrome --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI" --limit 10
 ```
 
 ### Step 3.9: Data Source Barrier — MANDATORY
@@ -263,8 +294,8 @@ anyweb --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied
 **批量验证**：用 `anyweb read` 并行验证，每批 5 个（实测 ~6s/批，25 条 URL 约 30 秒）：
 
 ```bash
-anyweb --json read "https://x.com/OpenAI/status/2039085161971896807" > /tmp/verify_1.json &
-anyweb --json read "https://x.com/AnthropicAI/status/XXX" > /tmp/verify_2.json &
+anyweb --chrome --json read "https://x.com/OpenAI/status/2039085161971896807" > /tmp/verify_1.json &
+anyweb --chrome --json read "https://x.com/AnthropicAI/status/XXX" > /tmp/verify_2.json &
 # ... 最多 5 个并发
 wait
 ```
@@ -305,7 +336,7 @@ wait
    - 政策/标准 → 查政府官网原文
    - **官方源 URL 获取**：Grok 原始输出 → Core Account 推文外链 → `tavily_search` → 都找不到则只放推文链接，不编造
 2. **Grok 溯源**：向 Grok 提问"谁最早公开报道了 X 事件？找到原始推文 URL 和互动数据"——Grok 拥有实时 X 数据，是找原始推文和时间线的最佳工具
-3. **anyweb search x**（补充推文搜索）：`anyweb --json search x "关键词"` 精确搜索相关推文，Grok 遗漏时用
+3. **anyweb search x**（补充推文搜索）：`anyweb --chrome --json search x "关键词"` 精确搜索相关推文，Grok 遗漏时用
 4. **Tavily 深搜**（补充外部深度）：`tavily_search(search_depth="advanced")` 搜索权威媒体报道（arstechnica, venturebeat, cnbc, reuters, techcrunch 等）、GitHub 仓库、技术分析文章、HN 讨论
 5. **社区反应**：core_accounts 中的评论降级为"社区反应"子板块，不作为主信源
 6. **截图更新**：如果该事件进入 Top 5 截图，用原始推文替换二手评论截图
@@ -452,20 +483,30 @@ Managed in `references/core_accounts.yaml`. Read at the start of `digest` and `d
 
 ## Known Limitations
 
-### anyweb / Grok 交互
+### anyweb Chrome 模式
 
+- **所有命令必须加 `--chrome`**：连接系统 Chrome，复用 X 登录态，不启动 Playwright
 - anyweb daemon 在命令间保持页面状态
-- 必须用 `anyweb type`（键盘事件），Grok textarea 是 React 受控组件
-- 提交用 `anyweb keys Enter`（不要在 type 末尾加 `\n`）
+- 必须用 `anyweb --chrome type`（键盘事件），Grok textarea 是 React 受控组件
+- 提交用 `anyweb --chrome keys Enter`（不要在 type 末尾加 `\n`）
 - 每次 `?new=true` 开新对话
-- 多页面用 `--page` 参数，headless 下无焦点竞争
-- 第一个 `anyweb open` 必须串行（启动 daemon），后续可并行
+- 多页面用 `--page` 参数，Chrome 扩展支持多 tab 并行
+- 第一个 `anyweb --chrome open` 必须串行（启动 daemon + 等待扩展连接），后续可并行
+- 首次使用：`anyweb --chrome doctor` 安装 Chrome 扩展
 
 ### 推文抓取
 
 - `anyweb read` 返回的推文包含 `[View tweet](URL)` 链接
 - 深度抓取：`anyweb scroll down` → `anyweb eval` 提取
 - DOM 选择器：`article[role="article"]`, `[data-testid="tweetText"]`, `time[datetime]`
+
+### AX Tree 新特性（v2.2+）
+
+- `anyweb state --ax`：获取完整 Accessibility Tree，包含页面所有文本和交互元素
+- `anyweb state --ax -i`：仅交互元素（按钮、链接、输入框），用于检测 UI 状态
+- `anyweb state --ax --depth N`：限制深度，减少输出量
+- `anyweb click e5`：通过 AX ref ID 点击元素，比 CSS 选择器更稳定
+- **Grok 场景优势**：AX tree 能看到 Grok 完整回答文本（包括列表和 URL），而旧 `state` 命令看不到动态渲染的内容
 
 ### 日报路径
 
