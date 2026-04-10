@@ -1,0 +1,24 @@
+bitable:
+  app_token: "Fnsyb4Fu4a4ONPshEyEct0ntn0c"
+  table_id: "tblNlbYmRM2HB1Aa"
+
+wiki:
+  space_id: "7559794508562251778"
+  parent_node_token: "JZIOwcpzGijmAYk6d4ecBXSlnig"  # 具身内参节点
+
+fields:
+  name: "姓名"
+  english_name: "英文名"
+  institution: "当前机构/公司"
+  title: "头衔/身份"
+  domains: "关注的细分领域"
+  background: "过往关键背景"
+  priority: "追踪优先级"
+  twitter: "Twitter Handle"
+  last_checked: "最后检测时间"
+  status_note: "最新状态备注"
+
+priority_schedule:
+  P0: daily
+  P1: every_2_days
+  P2: weekly
