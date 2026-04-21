@@ -82,7 +82,7 @@ for f in glob.glob(os.path.join(media_dir, 'cover-raw.png')) + glob.glob(os.path
 
 # Step 8.2: 发布（含封面、截图、视频上传 + 卡片广播）
 result = publish_to_feishu(
-    md_path=os.path.expanduser('~/Documents/obsidian/mixiaomi/日报/智涌日报-YYYY-MM-DD.md'),
+    md_path=os.path.expanduser('~/Documents/obsidian/mixiaomi/wiki/日报/智涌日报-YYYY-MM-DD.md'),
     doc_title='智涌日报 - YYYY-MM-DD',
     wiki_parent_node='Rs4fwW23SiU0mCk0aBZcupXNnvd',
     media_dir=media_dir,

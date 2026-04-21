@@ -2,8 +2,8 @@
 name: youpin
 description: >
   悠悠有品(youpin898) CS2 饰品交易平台 API 交互工具。只读查询，严禁买卖操作。
-  支持：查询买卖订单、订单详情、库存查看、钱包余额、商品搜索（按名称查templateId）、商品在售列表、商品求购列表、收益统计分析、Excel导出。
-  当用户提到悠悠有品、youpin、交易记录、收益统计、持仓分析、订单查询、在售数、求购价、市场行情、搜索饰品、查饰品价格时使用。
+  支持：查询买卖订单、订单详情、库存查看、钱包余额、商品搜索（按名称查templateId）、商品在售列表、商品求购列表、价格走势（成交价/在售数量/在售价格，7/15/30天）、收益统计分析、Excel导出。
+  当用户提到悠悠有品、youpin、交易记录、收益统计、持仓分析、订单查询、在售数、求购价、市场行情、搜索饰品、查饰品价格、价格走势、在售数量趋势时使用。
   CRITICAL: 绝对禁止调用任何购买、出售、上架、下架、求购、发货相关接口。
 ---
 
@@ -78,8 +78,8 @@ JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通
 
 **搜索联想参数** (输入时实时调用):
 ```json
-{"keyWords": "红线", "userId": "4709372", "listType": "10", "gameId": 730,
- "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+{"keyWords": "红线", "userId": "14095698", "listType": "10", "gameId": 730,
+ "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
 ```
 - 返回 `Data.dataList[]` — 每条: `commodityName`, `templateId`, `haveTemplateToggleList`
 - 最多返回 10 条
@@ -89,7 +89,7 @@ JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通
 ```json
 {"keyWords": "红线", "listType": 10, "gameId": 730, "pageIndex": 1, "pageSize": 20,
  "listSortType": 0, "filterMap": {}, "minPrice": "", "maxPrice": "",
- "userId": "4709372", "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+ "userId": "14095698", "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
 ```
 - 返回 `Data.commodityTemplateList[]` — 每条: `Id`(=templateId), `CommodityName`, `Price`, `OnSaleCount`, `SteamPrice`
 - 注意: 大写字段名（`Data`, `Id`, `CommodityName`）
@@ -111,7 +111,35 @@ JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通
 | 账户信息 | `/api/youpin/bff/payment/v1/user/account/info` |
 | 钱包类型 | `/api/youpin/bff/payment/v1/user/account/wallet/type` |
 
-### 6. 收益统计分析
+### 6. 价格走势（趋势数据）
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 趋势筛选配置 | `/api/youpin/price/trend/filter/info` | POST |
+| 趋势数据 | `/api/youpin/price/trend/data` | POST |
+
+**筛选配置参数**: `{"templateId": 782}`
+- 返回可用的趋势类型和天数选项
+- UU 平台类型: `type=1` 成交价格, `type=11` 在售数量, `type=12` 在租数量, `type=14` 在售价格
+- Steam 平台: `type=13`
+- 天数选项: `7`(近7天), `15`(近15天), `30`(近30天) — **最大30天**
+
+**趋势数据参数**: `{"orderType": 1, "day": 30, "templateId": 782}`
+- `orderType`: 对应上面的 type 值
+- `day`: 7 / 15 / 30
+- 返回 `data.tradeDataList[]`:
+  - `time`: 毫秒时间戳
+  - `price`: 值（成交价格时为元；在售数量时为件数）— 字符串类型
+  - `localDate`: 日期 "2026-04-03"
+  - `proportion`: 比例值
+- 每天多个数据点（约5-6个采样），需按 `localDate` 聚合取均值
+
+**常用组合**:
+- 成交价格走势: `orderType=1, day=30`
+- 在售数量走势: `orderType=11, day=30`
+- 在售价格走势: `orderType=14, day=30`
+
+### 7. 收益统计分析
 
 核心分析流程：
 
@@ -152,22 +180,21 @@ orderStatus         子品状态
 
 ## 执行环境
 
-脚本在**个人 PC**（工作站）上运行，通过 frp 穿透访问：
+悠悠有品 API 是公网接口，**本地即可直接调用**，无需通过U机。
 
 ```bash
-# SCP 脚本到 PC
-scp -P 6000 /tmp/script.py mixiaomi@106.15.125.84:/tmp/script.py
+# 本地直接执行 Python 脚本
+python3 /tmp/script.py
 
-# 远程执行
-ssh -p 6000 mixiaomi@106.15.125.84 "python3 /tmp/script.py"
-
-# 下载结果
-scp -P 6000 mixiaomi@106.15.125.84:/tmp/result.xlsx ~/Desktop/
+# 结果直接保存到本地
+# 例如 ~/Desktop/result.xlsx
 ```
+
+> Token 脚本历史存放在 U机 `/home/mixiaomi/projects/csfilter/scripts/youpin_profit.py`，但执行不依赖U机。
 
 ## 注意事项
 
-- 价格单位是**分**，显示时除以 100
+- 价格单位不统一：**订单接口**的 `totalAmount` 和 `productDetailList.price` 是**分**（除以100），**在售/求购/趋势接口**的 price 是**元**（直接使用）
 - `Gameid: 730` = CS2
 - 多件订单必须用 `productDetailList` 展开，`productDetail` 只有第一件
 - Token 过期后需用户重新提供（从 APP 抓包获取）

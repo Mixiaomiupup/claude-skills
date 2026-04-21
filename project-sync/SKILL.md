@@ -47,7 +47,7 @@ ToolSearch("select:mcp__yunxiao__search_projects,mcp__yunxiao__list_sprints,mcp_
 
 | 用户说 | 云效项目名 | 项目 ID | 飞书 wiki 位置 |
 |--------|-----------|---------|----------------|
-| 跃科 | Yueke_by_Duco | ca70cf018b805f93452bb76d75 | 联创项目 > 扁线电机柔性插装项目 > 项目排期 > 待办事项 |
+| 跃科 | yueke-duco | ca70cf018b805f93452bb76d75 | 联创项目 > 扁线电机柔性插装项目 > 项目排期 > 待办事项 |
 
 搜索时先用用户原文搜，搜不到则尝试别名（中文名、拼音、英文名）。
 
@@ -282,7 +282,7 @@ lark-cli api POST /open-apis/bitable/v1/apps/<app_token>/tables/<table_id>/recor
 
 ```markdown
 同步完成：
-- 项目：跃科 (Yueke_by_Duco)
+- 项目：跃科 (yueke-duco)
 - 迭代：version 0.0.1 (3/6 - 4/7)
 - 新增：7 条记录
 - 更新：0 条记录

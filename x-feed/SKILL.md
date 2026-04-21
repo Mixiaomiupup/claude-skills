@@ -11,7 +11,10 @@ Orchestrate existing tools to manage Twitter information flow: discover accounts
 
 **Prerequisite**: anyweb must be installed (`pip install -e ~/projects/anyweb` or `pip install anyweb`). Verify with `anyweb doctor`.
 
-**CDP 直连模式（必须使用）**：所有 anyweb 命令加 `--cdp` 标志，通过 CDP 协议直连用户浏览器，复用登录态。需要浏览器启动时带 `--remote-debugging-port`（Edge 用 9224，Chrome 用 9222）。环境变量 `ANYWEB_CDP` 指定端口（默认 `http://localhost:9222`）。
+**双模式运行**：
+- **Grok 交互**：加 `--cdp` 标志，anyweb 自动启动独立 Chrome（AI 专用，与用户 Edge 隔离）。Grok 内容提取完毕后 `anyweb close` 关闭 Chrome。
+- **数据读取**（read/search/screenshot）：不加 `--cdp`，走 headless 模式，用 `~/.anyweb/sessions/` 中保存的 cookie，无需浏览器窗口。
+- **Cookie 过期**：`anyweb status` 检查，过期时 `anyweb login x --headed` 重新登录。
 
 ---
 
@@ -48,7 +51,7 @@ For multiple queries, use `--page` for parallel execution (see Digest Mode Step 
 ### Method B: Seed Cross-Analysis (deep)
 
 1. **Select seeds** from `references/core_accounts.yaml` `discover_seeds` list
-2. **Fetch following lists**: `anyweb --cdp --json read "https://x.com/{seed}/following"`
+2. **Fetch following lists**: `anyweb --json read "https://x.com/{seed}/following"`
 3. **Cross-reference** — find accounts followed by multiple seeds
 4. **Rank** by `overlap_count` descending
 
@@ -67,7 +70,7 @@ Generate a daily Twitter digest of hot content.
 
 1. **读取上次采集时间**：
    ```
-   Glob ~/Documents/obsidian/mixiaomi/日报/{智涌日报,X日报}-*.md → 按日期倒序取第 1 篇
+   Glob ~/Documents/obsidian/mixiaomi/wiki/日报/{智涌日报,X日报}-*.md → 按日期倒序取第 1 篇
    Read frontmatter 的 collected_at 字段
    若无 collected_at，则以文件名日期 + "T23:59" 为近似值
    ```
@@ -106,41 +109,44 @@ wait
 wait
 
 # Phase 4: Wait for responses + read content
-# 方案 A (推荐): AX Tree 轮询 — 用 state --ax 检测完成信号并读取内容
-# 1. 轮询检测完成：AX tree 中出现 "Copy text" 按钮 = 回答完成
-#    while true; do
-#      anyweb --cdp state --page grok1 --ax -i 2>/dev/null | grep -q '"Copy text"' && break
-#      sleep 3
-#    done
-# 2. 读取完整回答：AX tree 包含所有 StaticText 节点，即 Grok 全文
-#    anyweb --cdp state --page grok1 --ax > /tmp/grok1.txt
-
-# 方案 B (回退): JS Observer — 当 AX tree 不可用时
-anyweb --cdp eval --page grok1 '<OBSERVER_JS>' > /tmp/grok1.txt &
-# ... (同理 grok2/3/4)
+# 方案 A (推荐): content-stable — 等页面内容停止变化
+anyweb --cdp wait --page grok1 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok2 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok3 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok4 content-stable --duration 5 --timeout 120000 &
 wait
+
+# 读取完整回答（AX tree 包含结构化文本 + URL）
+anyweb --cdp state --page grok1 --ax > /tmp/grok1.txt
+anyweb --cdp state --page grok2 --ax > /tmp/grok2.txt
+# ... (同理 grok3/4)
 ```
 
-**方案 A: AX Tree 轮询（推荐）**
+**方案 A: content-stable（推荐，v3.0+）**
 
-AX tree 的 `state --ax -i`（interactive-only）输出中包含所有按钮的 `aria-label`。检测 `"Copy text"` 按钮出现即表示 Grok 回答完成。完成后用 `state --ax` 获取全文，AX tree 的 StaticText 节点包含 Grok 完整回答（含 URL、列表结构）。
+`wait content-stable` 每秒对页面内容做 hash 比较，连续 `--duration` 秒不变则返回。一条命令替代旧方案的 60 次 `state --ax -i | grep "Copy text"` 轮询循环。
 
 ```bash
-# 轮询检测完成（每 3 秒，超时 180 秒）
-for i in $(seq 1 60); do
-  sleep 3
-  anyweb --cdp state --page grok1 --ax -i 2>/dev/null | grep -q '"Copy text"' && break
-done
+# 4 个 tab 并行等待（阻塞到内容稳定，无需轮询）
+anyweb --cdp wait --page grok1 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok2 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok3 content-stable --duration 5 --timeout 120000 &
+anyweb --cdp wait --page grok4 content-stable --duration 5 --timeout 120000 &
+wait
 
 # 读取 Grok 完整回答
 anyweb --cdp state --page grok1 --ax > /tmp/grok1.txt
 ```
 
-**优势**：不需要复杂 JS Promise；AX tree 天然包含结构化文本（标题、列表、链接 URL），信息量比 `main.innerText` 更丰富。
+**优势**：无需 JS Promise 或 shell 循环；一条命令阻塞等待；内容 hash 比文本长度更精确（旧 `wait stable` 只比较长度）。
 
-**方案 B: JS Observer（回退）** — 检测 `aria-label="Copy text"` 按钮出现：
-```javascript
-new Promise(resolve => { const start = Date.now(); const check = () => { const elapsed = Math.floor((Date.now() - start) / 1000); const btns = document.querySelectorAll("button"); let hasCopy = false; for (const b of btns) { if (b.getAttribute("aria-label") === "Copy text" && b.offsetHeight > 0) { hasCopy = true; break; } } if (hasCopy && elapsed > 15) { const main = document.querySelector("main"); resolve(main ? main.innerText.substring(0, 15000) : "no main"); } else if (elapsed > 180) { const main = document.querySelector("main"); resolve("[TIMEOUT] " + (main ? main.innerText.substring(0, 15000) : "no main")); } else { setTimeout(check, 3000); } }; setTimeout(check, 10000); })
+**方案 B: AX Tree 轮询（回退）** — 当 `content-stable` 不适用时（如需要检测特定 UI 元素出现）：
+```bash
+for i in $(seq 1 60); do
+  sleep 3
+  anyweb --cdp state --page grok1 --ax -i 2>/dev/null | grep -q '"Copy text"' && break
+done
+anyweb --cdp state --page grok1 --ax > /tmp/grok1.txt
 ```
 
 **日期模板**：根据 Step 0 的 `query_dates` 动态生成：
@@ -200,8 +206,9 @@ Flag any tweets that contain demo videos with [VIDEO].
 - 每次 `?new=true` 开新对话
 - 必须在每个问题中加 "Include tweet URLs"
 - 用 `anyweb log` 排查操作失败
-- **推荐用 AX Tree 读取 Grok 回答**：`state --ax` 返回结构化文本（含 URL），比 `eval main.innerText` 信息更完整
-- **AX Tree 完成检测**：`state --ax -i | grep "Copy text"` 替代复杂 JS observer，更简洁可靠
+- **等待 Grok 回答用 `wait content-stable`**（v3.0+）：`anyweb --cdp wait --page grok1 content-stable --duration 5 --timeout 120000`，一条命令阻塞等待，替代旧的 state 轮询循环
+- **读取回答用 AX Tree**：`state --ax` 返回结构化文本（含 URL），比 `eval main.innerText` 信息更完整
+- **`close` 不杀 daemon**（v3.0+）：阶段间调 `close` 是安全的，daemon 保持存活，下次命令自动重连。需要真正停止用 `shutdown`
 
 **低新闻量降级策略**：如果 4 轮 Grok 中有 2 轮以上返回"No major announcements"或有效新闻条目不足 3 条，执行以下降级：
 1. 扩大 Core Account 扫描范围：从 8-15 个增加到 20-30 个
@@ -214,17 +221,17 @@ Flag any tweets that contain demo videos with [VIDEO].
 2. **并行读取**：直接并行多个 `anyweb read`，分批每批 5 个：
 
 ```bash
-# Batch 1: 5 accounts in parallel
-anyweb --cdp --json read "https://x.com/AnthropicAI" > /tmp/ca_AnthropicAI.json &
-anyweb --cdp --json read "https://x.com/OpenAI" > /tmp/ca_OpenAI.json &
-anyweb --cdp --json read "https://x.com/karpathy" > /tmp/ca_karpathy.json &
-anyweb --cdp --json read "https://x.com/DrJimFan" > /tmp/ca_DrJimFan.json &
-anyweb --cdp --json read "https://x.com/dotey" > /tmp/ca_dotey.json &
+# Batch 1: 5 accounts in parallel (headless, no --cdp)
+anyweb --json read "https://x.com/AnthropicAI" > /tmp/ca_AnthropicAI.json &
+anyweb --json read "https://x.com/OpenAI" > /tmp/ca_OpenAI.json &
+anyweb --json read "https://x.com/karpathy" > /tmp/ca_karpathy.json &
+anyweb --json read "https://x.com/DrJimFan" > /tmp/ca_DrJimFan.json &
+anyweb --json read "https://x.com/dotey" > /tmp/ca_dotey.json &
 wait
 
 # Batch 2: next 5 accounts
-anyweb --cdp --json read "https://x.com/Figure_robot" > /tmp/ca_Figure_robot.json &
-anyweb --cdp --json read "https://x.com/cursor_ai" > /tmp/ca_cursor_ai.json &
+anyweb --json read "https://x.com/Figure_robot" > /tmp/ca_Figure_robot.json &
+anyweb --json read "https://x.com/cursor_ai" > /tmp/ca_cursor_ai.json &
 # ... continue with remaining accounts
 wait
 
@@ -257,7 +264,7 @@ tavily_search(query="AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI
 **仅当 Grok 有效结果不足 5 条时执行**，作为补充搜索：
 
 ```bash
-anyweb --cdp --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI" --limit 10
+anyweb --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR embodied AI" --limit 10
 ```
 
 ### Step 3.9: Data Source Barrier — MANDATORY
@@ -294,8 +301,8 @@ anyweb --cdp --json search x "AI OR Claude OR GPT OR LLM OR humanoid robot OR em
 **批量验证**：用 `anyweb read` 并行验证，每批 5 个（实测 ~6s/批，25 条 URL 约 30 秒）：
 
 ```bash
-anyweb --cdp --json read "https://x.com/OpenAI/status/2039085161971896807" > /tmp/verify_1.json &
-anyweb --cdp --json read "https://x.com/AnthropicAI/status/XXX" > /tmp/verify_2.json &
+anyweb --json read "https://x.com/OpenAI/status/2039085161971896807" > /tmp/verify_1.json &
+anyweb --json read "https://x.com/AnthropicAI/status/XXX" > /tmp/verify_2.json &
 # ... 最多 5 个并发
 wait
 ```
@@ -309,12 +316,15 @@ wait
 
 ### Step 5: Rank
 
-按互动量（likes + retweets + replies）降序排列，然后分配到日报的五个板块：
-- **具身智能** — 机器人公司动态、demo、部署、政策
-- **模型与研究** — 新模型、论文、基准测试
-- **产品与工具** — AI 工具、开源项目、SDK、开发者体验
-- **行业动向** — 融资、收购、人事变动、战略调整
-- **前瞻与观点** — 大佬观点、行业辩论、趋势判断
+按互动量（likes + retweets + replies）降序排列，然后：
+
+1. **选头条**：从所有条目中选出当日最重磅的 1 条作为头条。优先选有官方公告/产品发布/重大突破的事件，互动量作为参考但不是唯一标准——新闻价值和影响力更重要。头条从原板块中移出，不重复出现。
+2. **分配到五个板块**：
+   - **具身智能** — 机器人公司动态、demo、部署、政策
+   - **模型与研究** — 新模型、论文、基准测试
+   - **产品与工具** — AI 工具、开源项目、SDK、开发者体验
+   - **行业动向** — 融资、收购、人事变动、战略调整
+   - **前瞻与观点** — 大佬观点、行业辩论、趋势判断
 
 ### Step 5.5: Deep Sourcing for Major Events
 
@@ -336,7 +346,7 @@ wait
    - 政策/标准 → 查政府官网原文
    - **官方源 URL 获取**：Grok 原始输出 → Core Account 推文外链 → `tavily_search` → 都找不到则只放推文链接，不编造
 2. **Grok 溯源**：向 Grok 提问"谁最早公开报道了 X 事件？找到原始推文 URL 和互动数据"——Grok 拥有实时 X 数据，是找原始推文和时间线的最佳工具
-3. **anyweb search x**（补充推文搜索）：`anyweb --cdp --json search x "关键词"` 精确搜索相关推文，Grok 遗漏时用
+3. **anyweb search x**（补充推文搜索）：`anyweb --json search x "关键词"` 精确搜索相关推文，Grok 遗漏时用
 4. **Tavily 深搜**（补充外部深度）：`tavily_search(search_depth="advanced")` 搜索权威媒体报道（arstechnica, venturebeat, cnbc, reuters, techcrunch 等）、GitHub 仓库、技术分析文章、HN 讨论
 5. **社区反应**：core_accounts 中的评论降级为"社区反应"子板块，不作为主信源
 6. **截图更新**：如果该事件进入 Top 5 截图，用原始推文替换二手评论截图
@@ -379,14 +389,27 @@ wait
 **排版约束**（飞书 + 微信共用）：
 - `![[tweet-{id}.png]]` 截图必须放在 blockquote (`>`) **外面**
 - **blockquote 内禁止嵌套子列表**（`> - item`）——飞书导入会变成空 bullet。改用 `/` 分隔的行内文本
-- **正文不显示互动数据**——标题行不加 `(37,696 likes)`，内容中不提 likes/reposts 数字。互动数据仅保留在溯源表中
+- **正文不显示互动数据**——标题行不加 `(37,696 likes)`，内容中不提 likes/reposts 数字
 - **不加数据来源 footer**——文末不放"数据来源: Grok..."等 meta 信息
+- **描述放正文，来源和点评用 blockquote**：每条新闻的三层结构中，描述放正文（不加 `>` 前缀），仅来源链接和 💡 点评用 blockquote。示例：
+  ```markdown
+  - **标题** by @handle
+    描述正文，不用引用格式。
+    > [来源](URL)
+    > 💡 编辑点评
+  ```
 
 **Markdown 模板**：
 
+**标题命名原则**：
+- 标题用大白话，照顾普通读者，不用缩写和行业黑话
+- 多个重大事件时用 `·` 分隔列出 2-3 个关键事件，不要只突出一条
+- 例：`智涌日报 - Snap裁员千人·用Claude要交身份证·机器狗学会自己干活 | 2026-04-16`
+- 反例：`智涌日报 - KYC·BD×DeepMind | 2026-04-16`（缩写看不懂）
+
 ```markdown
 ---
-title: "智涌日报 - YYYY-MM-DD"
+title: "智涌日报 - {头条关键词} | YYYY-MM-DD"
 type: digest
 date: YYYY-MM-DD
 collected_at: "YYYY-MM-DDTHH:MM+08:00"
@@ -397,12 +420,23 @@ status: enriched
 cover: "智涌日报-YYYY-MM-DD-cover.png"
 ---
 
-# 智涌日报 - YYYY-MM-DD
+# 智涌日报 - {头条关键词} | YYYY-MM-DD
 
 ![[智涌日报-YYYY-MM-DD-cover.png]]
 
 ## 概览
 > 5-7 条一句话摘要，每条标注所属板块
+
+## {事件标题}
+
+![[tweet-{headline_id}.png]]
+
+详细报道（3-5 段）：事件背景、核心内容、技术细节或行业影响、各方反应。
+比普通条目更深入，提供足够的上下文让读者不需要点开链接就能理解全貌。
+
+[来源](推文URL) | [官方公告](官网URL)
+
+💡 编辑点评
 
 ## 具身智能
 （三层结构 + 🎬 视频标记）
@@ -422,14 +456,11 @@ cover: "智涌日报-YYYY-MM-DD-cover.png"
 ### 板块趋势
 
 ## 持续发酵（前日已报，热度上升）
-
-## 溯源表
-| # | 标题 | 来源 | 互动数据 | 归属模块 |
 ```
 
 ### Step 7: Save
 
-Save to `~/Documents/obsidian/mixiaomi/日报/智涌日报-YYYY-MM-DD.md`
+Save to `~/Documents/obsidian/mixiaomi/wiki/日报/智涌日报-YYYY-MM-DD.md`
 
 ### Step 7.5: Media Collection — MANDATORY
 
@@ -437,7 +468,8 @@ Save to `~/Documents/obsidian/mixiaomi/日报/智涌日报-YYYY-MM-DD.md`
 
 **选取规则**：
 - **封面图**：必做，每期日报一张
-- **推文截图**：互动量 Top 5 的推文（必须有真实 tweet URL）
+- **头条图片**：必做。截取头条对应的推文或官网页面截图，嵌入头条板块
+- **推文截图**：互动量 Top 5 的推文（必须有真实 tweet URL，头条已截图的不重复）
 - **视频下载**：具身智能板块所有 🎬 标记的推文一律下载；其他板块仅 Top 5 且含视频的下载
 
 **子步骤**：
@@ -483,17 +515,18 @@ Managed in `references/core_accounts.yaml`. Read at the start of `digest` and `d
 
 ## Known Limitations
 
-### anyweb CDP 直连模式
+### anyweb 双模式（v4.0）
 
-- **所有命令加 `--cdp`**：通过 CDP 协议直连浏览器，复用登录态，原生 Playwright 并发
-- 浏览器需带 `--remote-debugging-port` 启动（Edge 9224，Chrome 9222）
-- 环境变量 `ANYWEB_CDP` 指定端口（默认 `http://localhost:9222`）
-- anyweb daemon 在命令间保持页面状态，断连后自动重连
+- **Grok 交互用 `--cdp`**：anyweb 自动启动独立 Chrome（AI 专用，与用户 Edge 隔离），`--cdp open/click/type/keys/wait/state` 操作 Grok 页面。Grok 内容提取完毕后 `anyweb close` 关闭 Chrome
+- **数据读取不加 `--cdp`**：`anyweb read/search/screenshot` 走 headless 模式，用 `~/.anyweb/sessions/` 中保存的 cookie，无需浏览器窗口
+- **Cookie 管理**：`anyweb status` 检查 cookie 过期状态。过期时 `anyweb login x --headed` 重新登录
+- **`close` 关闭 Chrome + 保留 daemon**（v4.0）：关闭 AI 专用 Chrome 和所有页面，但 daemon 存活，后续 headless 命令正常执行
+- **`wait content-stable`**（v3.0+）：等页面内容不再变化，推荐用于等 Grok 回答
 - 必须用 `anyweb --cdp type`（键盘事件），Grok textarea 是 React 受控组件
 - 提交用 `anyweb --cdp keys Enter`（不要在 type 末尾加 `\n`）
 - 每次 `?new=true` 开新对话
-- 多页面用 `--page` 参数，原生支持多 tab 并行（无扩展瓶颈）
-- 第一个 `anyweb --cdp open` 必须串行（启动 daemon + CDP 连接），后续可并行
+- 多页面用 `--page` 参数，原生支持多 tab 并行
+- **`anyweb status`**（v4.0）：查看 daemon/浏览器/页面/进程/cookie 全局状态
 
 ### 推文抓取
 
@@ -511,4 +544,4 @@ Managed in `references/core_accounts.yaml`. Read at the start of `digest` and `d
 
 ### 日报路径
 
-中文目录: `~/Documents/obsidian/mixiaomi/日报/智涌日报-YYYY-MM-DD.md`
+中文目录: `~/Documents/obsidian/mixiaomi/wiki/日报/智涌日报-YYYY-MM-DD.md`

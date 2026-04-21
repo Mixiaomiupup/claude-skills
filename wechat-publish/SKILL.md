@@ -1,6 +1,6 @@
 ---
 name: wechat-publish
-description: 发布文章到微信公众号（智涌MindSurge）。通过系统Chrome CDP自动化完成图片上传、草稿创建、内容更新和发布。当用户说"发到公众号"、"发微信"、"公众号发布"、"推送公众号"、"微信发表"，或任何涉及将内容发布到微信公众号的操作时使用。也适用于修改已发表文章的场景。
+description: 发布文章到微信公众号（智涌MindSurge）。通过系统Edge CDP自动化完成图片上传、草稿创建、内容更新和发布。当用户说"发到公众号"、"发微信"、"公众号发布"、"推送公众号"、"微信发表"，或任何涉及将内容发布到微信公众号的操作时使用。也适用于修改已发表文章的场景。
 ---
 
 # 微信公众号发布
@@ -8,52 +8,72 @@ description: 发布文章到微信公众号（智涌MindSurge）。通过系统C
 ## 1. 架构概述
 
 ```
-anyweb --chrome → Chrome扩展 → 系统Chrome → 用户登录 → 获取Cookie/Token
-    → 上传图片(API) → 创建/更新草稿(API) → 发表(CDP页面操作+扫码)
+scripts/publish.py 日报.md          ← 一键发布入口
+    ├── scripts/auth.py             ← CDP 取 cookie + token
+    ├── scripts/upload.py           ← 上传图片到微信 CDN
+    ├── ~/.claude/scripts/md2pub.py ← MD → 微信 HTML（零依赖）
+    └── scripts/draft.py            ← 创建/更新草稿 API
 ```
 
-**为什么用系统 Chrome？** 微信后台检测自动化浏览器，Playwright 即使用 `channel="chrome"` 也会被识别，页面渲染空白。`anyweb --chrome` 通过 Chrome 扩展连接系统 Chrome，与用户正常使用的浏览器完全一致，不会被检测。
+**一键发布**（推荐）:
+```bash
+python3 ~/.claude/skills/wechat-publish/scripts/publish.py 日报.md
+```
+
+**单独调用各步骤**:
+```bash
+# 1. 取凭证
+python3 scripts/auth.py --port 9224 > /tmp/wx_creds.json
+
+# 2. 上传图片
+python3 scripts/upload.py --creds /tmp/wx_creds.json cover.png tweet.png > /tmp/cdn_map.json
+
+# 3. 转换 MD → HTML
+python3 ~/.claude/scripts/md2pub.py input.md --body-only -o /tmp/body.html
+
+# 4. 创建草稿
+python3 scripts/draft.py --creds /tmp/wx_creds.json --title "标题" --content /tmp/body.html
+```
+
+**为什么用系统 Edge（本 skill 例外）？** 微信后台检测自动化浏览器，Playwright 即使用 `channel="chrome"` 也会被识别，页面渲染空白。其他 skill 的 `anyweb --cdp` 已改用独立 Chrome，但 wechat-publish 仍需 CDP 直连系统 Edge 浏览器 -- 微信的反自动化检测专门针对非 Edge 浏览器，Edge 与用户正常使用的浏览器完全一致不会被检测。Edge 需以 `--remote-debugging-port=9222` 启动。这是所有 skill 中唯一保留 Edge CDP 的。
 
 ## 2. 连接浏览器
 
-### 2.1 使用 anyweb --chrome（推荐）
+### 2.1 使用 anyweb --cdp（推荐）
 
 ```bash
-# 首次安装扩展
-anyweb --chrome doctor
-
-# 打开微信后台（复用系统 Chrome，无需重启）
-anyweb --chrome open "https://mp.weixin.qq.com/"
+# 打开微信后台（复用系统 Edge 登录态）
+anyweb --cdp open "https://mp.weixin.qq.com/"
 ```
 
-**优势**：不需要重启 Chrome、不需要 `--remote-debugging-port=9222`，扩展自动连接。
+**前提**：Edge 需以 `--remote-debugging-port=9222` 启动。
 
-### 2.2 anyweb --chrome 常用操作
+### 2.2 anyweb --cdp 常用操作
 
 ```bash
 # 导航
-anyweb --chrome open "URL"
+anyweb --cdp open "URL"
 
 # 执行 JS（等价于 CDP Runtime.evaluate）
-anyweb --chrome eval "document.title"
+anyweb --cdp eval "document.title"
 
 # 截图
-anyweb --chrome screenshot
+anyweb --cdp screenshot
 
 # 页面状态
-anyweb --chrome state --ax
+anyweb --cdp state --ax
 ```
 
 ### 2.3 需要原始 CDP 的操作（回退）
 
-以下操作超出 anyweb CLI 能力，仍需通过 `--remote-debugging-port=9222` 直接连接：
+以下操作超出 anyweb CLI 能力，仍需通过 CDP 直接连接（Edge 已以 `--remote-debugging-port=9222` 启动）：
 - `DOM.setFileInputFiles`（视频上传文件注入）
 - `Network.getCookies`（获取 httpOnly cookie）
 
 回退时启动方式：
 ```bash
-# 先完全退出 Chrome，再用调试端口启动
-open -a "Google Chrome" --args --remote-debugging-port=9222
+# Edge 需以调试端口启动（通常已配置）
+open -a "Microsoft Edge" --args --remote-debugging-port=9222
 ```
 
 CDP 通信模板（仅在需要原始 CDP 时使用）：
@@ -231,49 +251,75 @@ def video_marker(name):
 
 ## 5. Markdown → 微信 HTML
 
-### 5.1 HTML 结构模板
+### 5.1 使用 md2pub 脚本（推荐）
 
-```html
-<section style="background-color:#ffffff;padding:12px 8px;margin:0;border-radius:0;">
+**脚本位置**: `~/.claude/scripts/md2pub.py`（零外部依赖，纯 Python 标准库）
 
-<h2 style="font-size:20px;font-weight:bold;color:#1a1a1a;margin:28px 0 14px;padding-bottom:8px;border-bottom:3px solid #07c160;">标题</h2>
+```bash
+# 生成 body HTML（用于微信 API content0 字段）
+python3 ~/.claude/scripts/md2pub.py input.md --body-only -o /tmp/body.html
 
-<p style="font-size:16px;line-height:1.8;margin:16px 0 6px;color:#1a1a1a;"><strong>• 条目标题</strong></p>
+# 浏览器预览
+python3 ~/.claude/scripts/md2pub.py input.md --preview
 
-<section style="border-left:3px solid #e8a87c;padding:10px 14px;margin:6px 0 10px;background-color:#fdf5ef;border-radius:0 6px 6px 0;font-size:14px;color:#555;line-height:1.8;">
-引用/摘要内容
-</section>
-
-<p style="margin:6px 0 10px;padding:8px 10px;border:1px dashed #ccc;border-radius:6px;font-size:12px;color:#999;word-break:break-all;">
-https://x.com/example/status/123456
-</p>
-
-<p style="text-align:center;margin:12px 0;">
-<img src="CDN_URL" style="max-width:100%;height:auto;border-radius:8px;" />
-</p>
-
-</section>
+# 切换主题
+python3 ~/.claude/scripts/md2pub.py input.md --theme green --body-only
 ```
 
-### 5.2 关键约束
+**脚本内部流程**:
+
+| 步骤 | 函数 | 做什么 |
+|------|------|--------|
+| 预处理 | `preprocess()` | 去 frontmatter/Obsidian 语法；blockquote 中 `[text](url)` → `text: url`，管道分隔拆多行 |
+| 解析 | `parse_blocks()` | 逐行解析 markdown → block 结构体列表 |
+| 渲染 | `render_blocks()` + `render_inline()` | block → 带内联 CSS 的 HTML，按主题配色 |
+| 组装 | `convert()` | 包裹容器，输出最终 HTML |
+
+**也可在 Python 中直接调用**:
+
+```python
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("md2pub", str(Path.home() / ".claude/scripts/md2pub.py"))
+md2pub = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(md2pub)
+
+html_body = md2pub.convert(markdown_text, theme_name="default")
+```
+
+### 5.2 来源链接处理
+
+x-feed 日报的来源格式 `> [来源](URL) | [官方公告](URL)` 经 md2pub `preprocess()` 自动转换：
+
+| 输入（markdown） | 输出（HTML 纯文本） |
+|------------------|---------------------|
+| `> [CGTN 报道](URL) \| [新华社](URL)` | 两行：`CGTN 报道: URL` / `新华社: URL` |
+| `> 来源: https://x.com/...` | 原样保留 `来源: https://x.com/...` |
+| `> [GlobeNewswire](URL)` | `GlobeNewswire: URL` |
+
+**不需要修改 x-feed 模板**——md2pub 兼容所有现有格式。微信端外链不可点，但 URL 作为纯文本可见。
+
+### 5.3 关键约束
 
 | 约束 | 说明 |
 |------|------|
-| **禁止 `margin:-16px`** | 负 margin 导致内容溢出手机屏幕，是手机端显示异常的根本原因。始终用 `margin:0` |
-| **外链不可点击** | 微信过滤正文中的 `<a>` 外链。改为虚线框内展示纯文本 URL |
+| **禁止 `margin:-16px`** | 负 margin 导致内容溢出手机屏幕。始终用 `margin:0` |
+| **外链不可点击** | 微信过滤 `<a>` 外链。md2pub 预处理阶段自动将 blockquote 中的链接展开为纯文本 URL |
 | **图片必须用 CDN URL** | 只有 `mmbiz.qpic.cn` 域名的图片才显示 |
 | **图片加 max-width:100%** | 防止图片溢出手机屏幕 |
 | **不要用 text-align:justify** | 移动端会导致字间距异常放大 |
-| **有视频不截图** | 推文已有视频下载的，跳过该推文截图，视频比截图更有信息量 |
-| **推文截图裁剪** | 截取 X 推文时：1) JS 隐藏左侧导航栏和右侧趋势栏（`display:none`）；2) 截图后用 Python PIL 裁剪，只保留正文区域（约 x=130 到 x=880，750px 宽）；3) 不要截完整浏览器窗口 |
-| **视频用 marker 定位** | HTML 中在对应位置放占位符，插入视频前设置光标到 marker 处（见 4b.6） |
-| **不加数据来源 footer** | 文章末尾不要放"数据来源: Grok Search..."等 meta 信息 |
+| **有视频不截图** | 推文已有视频下载的，跳过该推文截图 |
+| **推文截图裁剪** | JS 隐藏侧边栏 → 截图 → PIL 裁剪正文区域（约 750px 宽） |
+| **视频用 marker 定位** | HTML 中放占位符，插入视频前设置光标到 marker 处（见 4b.6） |
+| **单次引用 ≤ 300 字** | 微信公众号单个 `<blockquote>` 不得超过 300 字。描述文本放正文，仅来源链接和 💡 点评用引用格式。md2pub.py 会对超标引用打印警告 |
+| **不加数据来源 footer** | 文章末尾不放"数据来源: Grok Search..."等 meta 信息 |
 
-### 5.3 深色模式（可选）
+### 5.4 深色模式
 
-两种方案：
-- **推荐**：推文截图直接用深色模式截取，省去适配工作
-- **手动适配**：在元素上添加 `data-darkmode-bgcolor-{id}` 和 `data-darkmode-color-{id}` 属性
+md2pub 的样式设计为**深浅模式兼容**:
+- blockquote 无背景色，只用左边框
+- H2 标题无背景色，用底部彩色边框
+- 不依赖 `data-darkmode-*` 属性
+- 推文截图建议用深色模式截取
 
 ## 6. 创建/更新草稿
 
@@ -408,7 +454,7 @@ hover 后 "改" 按钮位于行右侧中间位置（3个按钮中第2个）
 | 图片不显示 | 使用了外部图片 URL | 先上传到微信 CDN |
 | 链接点不了 | 微信过滤外链 | 展示为纯文本 URL |
 | API 发布返回 ret=2 | 需要扫码验证 | 通过 CDP 页面操作发布 |
-| Playwright 页面空白 | 微信检测自动化浏览器 | 用 `anyweb --chrome`（推荐）或系统 Chrome + CDP |
+| Playwright 页面空白 | 微信检测自动化浏览器 | 用 `anyweb --cdp` 直连系统 Edge |
 | JS 变量名冲突 | CDP 多次执行同一页面 | 用 IIFE 包裹 |
 | 视频全堆在文章开头/末尾 | 未用 marker 定位，视频插入到默认光标位置 | 用 marker 占位符技术（见 4b.6） |
 | 视频封面选不了 | 缩略图未加载就点击 | 等 15 秒 + 重试循环（见 4b.4） |

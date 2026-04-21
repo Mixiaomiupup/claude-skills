@@ -14,6 +14,7 @@ graph LR
     x2md[x2md<br/>X链接→Markdown] --> ob
     transcript[transcript<br/>视频字幕提取] --> ob
     ucal[ucal<br/>跨平台内容分析] --> ob
+    deep-research[deep-research<br/>横纵分析法] --> ob
     x-feed[x-feed<br/>X信息流] --> ob
     x-feed --> feishu
 
@@ -91,6 +92,8 @@ graph LR
 | **article-image** | 封面图/配图生成 | gemini-image | 196 | 5D风格系统 + Mermaid智能路由 |
 | **commit** | Git提交消息生成 | - | 109 | Google convention风格 |
 | **debug** | 系统性调试 | - | 219 | 症状分析→根因→方案 |
+| **learn** | 互动式学习模式 | - | 60 | 自适应难度+引导问答+多角度查漏补缺 |
+| **deep-research** | 横纵分析法深度研究 | anyweb CLI, tavily, article-gen | 120 | 纵向发展史+横向竞品对比+交汇判断 |
 | **doc-control** | 文档生成控制 | - | 151 | 防止过度生成文档 |
 | **embodied-intel** | 具身智能行业资讯 | anyweb CLI | 302 | 日报、人物追踪、人才流动 |
 | **explain** | 代码解释 | - | 119 | 类比、图解、分步拆解 |
@@ -116,7 +119,7 @@ graph LR
 | **wechat-publish** | 微信公众号发布 | Chrome CDP | 165 | 图片上传→草稿创建→HTML转换→发布 |
 | **youpin** | 悠悠有品查询 | - | 174 | 订单/库存/收益/市场行情(只读) |
 
-**统计**: 26 个 skill, 6800+ 行
+**统计**: 28 个 skill, 6960+ 行
 
 ---
 
@@ -196,6 +199,7 @@ X信息流 → x-feed (anyweb CLI) → Obsidian + 飞书
 | 2026-03-23 | x-feed, feishu, feishu_publish.py | **日报媒体链路**: x-feed 新增 Step 7.5(封面图+推文截图+Obsidian嵌入)；feishu_publish.py 重写 insert_images_to_doc() 使用 3-step 方法(_insert_image_block helper)，修复 block text 搜索范围(+bullet/ordered/callout)和 URL 解码匹配；feishu SKILL.md 更新 troubleshooting 和 helper 说明；ARCHITECTURE 新增 Section 3.3 媒体链路 |
 | 2026-03-22 | ucal, x-feed, embodied-intel, article-gen | **ucal→anyweb 迁移**: 所有 skill 从 ucal MCP 调用迁移到 anyweb CLI 原子命令；MCP 配置从 ucal 切换到 anyweb；新增 Section 3.3 迁移对比表 |
 | 2026-03-21 | ob, feishu | **飞书发布流程重构**: ob 新增 Section 1.6 完整发布链路(新建/更新判断 + 预处理 + 导入 + Mermaid转图片必须执行)；feishu 图片上传改为 tenant_token 优先(此前错误记录为必须UAT) |
+| 2026-04-14 | deep-research | **新增 skill**: 横纵分析法深度研究（by 数字生命卡兹克），纵向发展史+横向竞品对比+交汇判断，万字级结构化报告，与 analyze（快速分析）明确区分 |
 | 2026-04-09 | article-gen | **Operation-first 重构**: 一级路由从 type 改为 operation（create/repost/rewrite/translate/summarize/extract/update），type 扩展到 13 种对齐 vault 实际数据，frontmatter.md 补充 article/tweet/digest/research 扩展字段 |
 | 2026-04-09 | commit, review, auto-cr, ship | **AI Native 开发规范体系**: commit 加 pre-commit 格式化+scope+中文描述；review 改双模式（安全门卫+全量）；新增 auto-cr（云效 CR+AI 评审回填）和 ship（一把梭）；calibration CR #13 端到端验证通过 |
 | 2026-03-21 | ARCHITECTURE.md | **初始创建**: 扫描全部 24 个 skill，建立架构全景、工作流地图、索引表 |

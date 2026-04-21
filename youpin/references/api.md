@@ -1,6 +1,6 @@
 # 悠悠有品 API 参考
 
-来源: mitmproxy 抓包 iOS APP v5.42.0
+来源: mitmproxy 抓包 iOS APP v5.43.0
 
 ## 认证配置
 
@@ -12,14 +12,14 @@ HEADERS = {
     "Content-Type": "application/json",
     "AppType": "3",
     "platform": "ios",
-    "version": "5.42.0",
-    "app-version": "5.42.0",
+    "version": "5.43.0",
+    "app-version": "5.43.0",
     "api-version": "1.0",
     "Gameid": "730",
     "uk": "<用户密钥>",
     "deviceUk": "<设备密钥>",
     "DeviceToken": "<设备ID>",
-    "User-Agent": "iOS/26.3 AppleStore com.uu898.uusteam/5.42.0 Alamofire/5.2.2",
+    "User-Agent": "iOS/26.3.1 AppleStore com.uu898.uusteam/5.43.0 Alamofire/5.2.2",
     "package-type": "uuyp",
 }
 ```
@@ -31,7 +31,7 @@ CB = {
     "AppType": "3",
     "Platform": "ios",
     "SessionId": "<设备ID>",
-    "Version": "5.42.0"
+    "Version": "5.43.0"
 }
 ```
 
@@ -96,6 +96,30 @@ CB = {
 | 详情页在售 | `POST /api/homepage/v3/detail/commodity/list/sell` |
 | 游戏列表 | `GET /api/youpin/commodity/adapter/public/game/queryAllList` |
 
+### 价格走势
+
+| 接口 | 路径 | 参数 |
+|------|------|------|
+| 趋势筛选配置 | `POST /api/youpin/price/trend/filter/info` | `{"templateId": 782}` |
+| 趋势数据 | `POST /api/youpin/price/trend/data` | `{"orderType": 1, "day": 30, "templateId": 782}` |
+| 有效日期范围 | `POST /api/youpin/price/trend/getValidDateTime` | `{"templateId": 782, "type": 14}` |
+
+**orderType 值**:
+- `1` = 成交价格（UU平台）
+- `11` = 在售数量
+- `12` = 在租数量
+- `14` = 在售价格
+- `13` = Steam 价格
+
+**day 值**: `7`(近7天), `15`(近15天), `30`(近30天) — 最大30天
+
+**趋势数据响应**: `data.tradeDataList[]`
+- `time`: 毫秒时间戳
+- `price`: 值（字符串）— 成交价时为元，在售数量时为件数
+- `localDate`: 日期 "2026-04-03"
+- `proportion`: 比例值
+- 每天约5-6个采样点，需按 `localDate` 聚合
+
 ## 响应格式
 
 两种响应风格共存:
@@ -117,8 +141,8 @@ CB = {
 `POST /api/homepage/search/match`
 
 ```json
-{"keyWords": "红线", "userId": "4709372", "listType": "10", "gameId": 730,
- "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+{"keyWords": "红线", "userId": "14095698", "listType": "10", "gameId": 730,
+ "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
 ```
 
 - **关键参数**: `keyWords`（大写W）、`userId`（必须）、`gameId`（整数730）
@@ -132,7 +156,7 @@ CB = {
 ```json
 {"keyWords": "红线", "listType": 10, "gameId": 730, "pageIndex": 1, "pageSize": 20,
  "listSortType": 0, "filterMap": {}, "minPrice": "", "maxPrice": "",
- "userId": "4709372", "AppType": "3", "Platform": "ios", "Version": "5.42.0", "SessionId": "..."}
+ "userId": "14095698", "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
 ```
 
 - 返回 `Data.commodityTemplateList[]`: `Id`(=templateId), `CommodityName`, `Price`, `OnSaleCount`, `SteamPrice`, `CommodityHashName`, `TypeName`, `Exterior`, `Quality`, `Rarity`

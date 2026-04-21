@@ -93,7 +93,7 @@ description: "Universal article generation engine. Operation-first routing: crea
 1. **抓取原文**：
    - X 链接 → 调用 `x2md` skill
    - 其他 URL → `anyweb read` 获取正文 + `anyweb eval` 提取图片
-   - 如需登录态 → `anyweb --chrome` 模式
+   - 如需登录态 → headless 模式自动加载保存的 cookie。仅交互式操作（DOM 注入、eval）需要 `--cdp`
 2. **推断 type**：X → `news`/`tweet`；博客/技术文章 → `article`/`reference`
 3. **Enrichment**：保留原文，补充 summary/category/tags
 4. **翻译**（如 `lang != zh`）：重组为 `## 翻译` → `## 原文` 结构
@@ -265,7 +265,7 @@ anyweb eval "JSON.stringify([...document.querySelectorAll('article img, .post im
 anyweb close
 ```
 
-如需登录态：`anyweb --chrome` 模式。
+如需登录态：headless 模式自动加载保存的 cookie。仅交互式操作（DOM 注入、eval）需要 `--cdp`。
 
 ## 写作风格约束
 

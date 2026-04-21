@@ -48,7 +48,7 @@ ToolSearch("select:mcp__yunxiao__search_projects,mcp__yunxiao__list_sprints,mcp_
 
 | 用户说 | 云效项目名 | 项目 ID |
 |--------|-----------|---------|
-| 跃科 | Yueke_by_Duco | ca70cf018b805f93452bb76d75 |
+| 跃科 | yueke-duco | ca70cf018b805f93452bb76d75 |
 
 如果别名表没有匹配，用多个关键词分别搜索（中文名、拼音、英文名）。
 

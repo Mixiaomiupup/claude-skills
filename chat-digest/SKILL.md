@@ -99,12 +99,12 @@ mkdir -p ~/.claude/data/chat-digest
 
 #### 微信公众号（mp.weixin.qq.com）— 必须用 anyweb + markdownify
 
-`tavily_extract` 和 `anyweb --cdp read` 都会丢失格式（标题、加粗、列表）和视频，不能用于公众号。
+`tavily_extract` 和 `anyweb read` 都会丢失格式（标题、加粗、列表）和视频，不能用于公众号。
 
 > **注意**：`anyweb --cdp state --ax` 可以获取微信文章的结构化纯文本（heading、paragraph），但**不包含图片 URL 和 HTML 格式**，无法替代 eval+markdownify 流程。AX tree 适合 Grok 等交互页面的文本读取，不适合需要保留图片和格式的文章抓取。
 
 ```bash
-# 1. 打开页面（用 --cdp 直连浏览器，复用登录态）
+# 1. 打开页面（用 --cdp 自动启动独立 Chrome，交互式 DOM 操作）
 anyweb --cdp open "https://mp.weixin.qq.com/s/..."
 sleep 3
 
@@ -198,7 +198,7 @@ tavily_extract(urls=["https://..."], include_images=True, format="markdown")
 2. **群内同源文章覆盖**：如果同一内容已有公众号版本，标注"同源内容"并跳过
 3. **图片 OCR**（兜底）：`anyweb --cdp open` → 提取轮播图 img src → curl 下载 → Read 工具读图识别文字 → 拼接正文
 
-小红书文字笔记可直接用 `anyweb --cdp read` 获取。短链接（`xhslink.com`）比长链接更可靠。
+小红书文字笔记可直接用 `anyweb read` 获取。短链接（`xhslink.com`）比长链接更可靠。
 
 #### 来源类型判断
 
