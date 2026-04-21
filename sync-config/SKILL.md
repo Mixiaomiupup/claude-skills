@@ -11,8 +11,8 @@ Unified CLI for syncing Claude Code config and skills to remote repos.
 
 | Component | Repos | Content |
 |-----------|-------|---------|
-| **config** | GitHub `claude-config` + Yunxiao `claude_config` | hooks, settings, agents, commands, output-styles, plans infra, plugins, docs |
-| **skills** | GitHub `claude-skills` + Yunxiao `claude_skills` | 16 first-party skills (excluding baoyu-skills) |
+| **config** | GitHub `claude-config` + Yunxiao `claude-config` | hooks, settings, agents, commands, output-styles, plans infra, plugins, docs |
+| **skills** | GitHub `claude-skills` + Yunxiao `claude-skills` | 16 first-party skills (excluding baoyu-skills) |
 | **third-party** | Each has own remote | baoyu-skills etc. (tracked in `component-manifest.json`) |
 
 ## Commands

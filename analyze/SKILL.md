@@ -282,7 +282,7 @@ anyweb --json search <platform> "<query>" --limit 10
 | 场景 | 处理 |
 |------|------|
 | 浏览器平台会话过期 | 提示用户：`anyweb --headed login <platform>` → 重试 |
-| 需要登录态（B站字幕、X 被拦等） | 用 `anyweb --chrome` 模式，复用用户真实浏览器的登录会话。`--chrome` 与普通模式可同时使用，互不干扰 |
+| 需要登录态（B站字幕、X 被拦等） | anyweb 默认走 headless 模式（用保存的 cookie）。需要交互式操作（DOM 操作、eval 注入）时用 `--cdp` 模式（自动启动独立 Chrome，AI 专用）。交互完成后用 `anyweb close` 关闭 Chrome |
 | 搜索结果为空 | 建议用户换关键词 |
 | 单篇读取失败 | 跳过该篇，在输出中标注 "[不可访问]" |
 | 内容截断（懒加载） | 降级：open → scroll → `state --ax`（推荐）或 `get text`（回退） |

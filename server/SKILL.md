@@ -1,16 +1,18 @@
 ---
 name: server
-description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to cloud/remote machines. Also use when deploying projects, checking server status, or managing services. Machines are called 云机 (cloud), 大机 (big ECS), U机 (Ubuntu), W机 (Windows).
+description: Use when user mentions server, deployment, remote access, SSH, or needs to connect to cloud/remote machines. Also use when deploying projects, checking server status, or managing services. Machines are called 云机 (cloud), 新云机 (new cloud), 大机 (big ECS), U机 (Ubuntu), C机 (CS2 Quantix), W机 (Windows).
 ---
 
 # Machines Overview
 
 | 代号 | 角色 | Access |
 | ---- | ---- | ------ |
-| **云机** | Web 托管, frps 中继 | `ssh root@106.15.125.84` |
+| **云机** | Web 托管, frps 中继 (U机/W机) | `ssh root@YOUR_SERVER_IP` |
+| **新云机** | Web 托管, frps 中继 (C机) | `sshpass -p 'chenhui' ssh root@47.97.153.197` |
 | **大机** | 高性能计算 (32C/245G) | `sshpass -p 'Huazhiai123' ssh root@8.147.115.151` |
-| **U机** | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@106.15.125.84` (via frp) |
-| **W机** | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@106.15.125.84` (via frp) |
+| **U机** | 重计算任务 (采集/训练) | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP` (via frp) |
+| **C机** | CS2 Quantix 独立部署 | `sshpass -p 'chenhui' ssh -p 6001 chenhui@47.97.153.197` (via frp) |
+| **W机** | 待定 | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` (via frp) |
 
 ---
 
@@ -22,11 +24,11 @@ China East 2 (Shanghai) Ubuntu instance for hosting personal projects.
 
 | Field      | Value                    |
 | ---------- | ------------------------ |
-| Host       | `106.15.125.84`          |
-| Private IP | `172.24.17.232`          |
+| Host       | `YOUR_SERVER_IP`          |
+| Private IP | `YOUR_PRIVATE_IP`          |
 | User       | `root`                   |
-| Password   | `mi954993689..`          |
-| SSH        | `ssh root@106.15.125.84` |
+| Password   | `YOUR_PASSWORD_HERE`          |
+| SSH        | `ssh root@YOUR_SERVER_IP` |
 
 ## Specs
 
@@ -54,17 +56,17 @@ China East 2 (Shanghai) Ubuntu instance for hosting personal projects.
 
 ```bash
 # SSH connect (use sshpass for password auth)
-sshpass -p 'mi954993689..' ssh -o StrictHostKeyChecking=no root@106.15.125.84
+sshpass -p 'YOUR_PASSWORD_HERE' ssh -o StrictHostKeyChecking=no root@YOUR_SERVER_IP
 
 # Deploy static site (example: shige-h5)
 cd ~/projects/shige-h5 && npm run build
-scp -r dist/* root@106.15.125.84:/var/www/html/shige/
+scp -r dist/* root@YOUR_SERVER_IP:/var/www/html/shige/
 
 # Check nginx status
-ssh root@106.15.125.84 "systemctl status nginx"
+ssh root@YOUR_SERVER_IP "systemctl status nginx"
 
 # View nginx config
-ssh root@106.15.125.84 "cat /etc/nginx/sites-enabled/default"
+ssh root@YOUR_SERVER_IP "cat /etc/nginx/sites-enabled/default"
 ```
 
 ### CSFilter Operations
@@ -120,10 +122,10 @@ location /新项目/ {
 ```bash
 # frps config: /etc/frp/frps.toml
 # bindPort = 7000, auth.token = "csfilter2026frp"
-# Dashboard: http://106.15.125.84:7500 (admin/admin123)
+# Dashboard: http://YOUR_SERVER_IP:7500 (admin/admin123)
 
 # Service management
-sshpass -p 'mi954993689..' ssh root@106.15.125.84 "systemctl status frps"
+sshpass -p 'YOUR_PASSWORD_HERE' ssh root@YOUR_SERVER_IP "systemctl status frps"
 ```
 
 ---
@@ -189,7 +191,7 @@ sshpass -p 'Huazhiai123' ssh root@8.147.115.151 "command here"
 
 | Field    | Value                                        |
 | -------- | -------------------------------------------- |
-| SSH      | `ssh -p 6000 mixiaomi@106.15.125.84`         |
+| SSH      | `ssh -p 6000 mixiaomi@YOUR_SERVER_IP`         |
 | 穿透方式 | frpc → 云机 frps (port 7000)                 |
 | User     | `mixiaomi`                                   |
 
@@ -212,7 +214,7 @@ sshpass -p 'Huazhiai123' ssh root@8.147.115.151 "command here"
 
 ```bash
 # 推送文件到U机（从本地 Mac 执行）
-scp -P 6000 path/to/file mixiaomi@106.15.125.84:/home/mixiaomi/projects/csfilter/path/to/file
+scp -P 6000 path/to/file mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/path/to/file
 ```
 
 ## CSFilter 部署
@@ -230,32 +232,32 @@ csfilter 的实际运行环境在U机上（不在云机）。
 
 ```bash
 # 服务管理
-ssh -p 6000 mixiaomi@106.15.125.84 "sudo systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
 
 # 停止/启动 scheduler
-ssh -p 6000 mixiaomi@106.15.125.84 "sudo systemctl stop csfilter-scheduler"
-ssh -p 6000 mixiaomi@106.15.125.84 "sudo systemctl start csfilter-scheduler"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl stop csfilter-scheduler"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl start csfilter-scheduler"
 
 # 查看日志
-ssh -p 6000 mixiaomi@106.15.125.84 "tail -50 /home/mixiaomi/projects/csfilter/logs/scheduler.log"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "tail -50 /home/mixiaomi/projects/csfilter/logs/scheduler.log"
 ```
 
 ### 更新代码流程
 
 ```bash
 # 1. 从本地 Mac 推送修改的文件
-scp -P 6000 run_scheduler.py mixiaomi@106.15.125.84:/home/mixiaomi/projects/csfilter/
-scp -P 6000 src/collector/mitm_proxy.py mixiaomi@106.15.125.84:/home/mixiaomi/projects/csfilter/src/collector/
+scp -P 6000 run_scheduler.py mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/
+scp -P 6000 src/collector/mitm_proxy.py mixiaomi@YOUR_SERVER_IP:/home/mixiaomi/projects/csfilter/src/collector/
 
 # 2. SSH 到工作站重启服务
-ssh -p 6000 mixiaomi@106.15.125.84 "sudo systemctl restart csfilter-scheduler"
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP "sudo systemctl restart csfilter-scheduler"
 ```
 
 ## Common Operations
 
 ```bash
 # SSH connect (via frp tunnel)
-ssh -p 6000 mixiaomi@106.15.125.84
+ssh -p 6000 mixiaomi@YOUR_SERVER_IP
 
 # frpc service on this machine
 sudo systemctl status frpc
@@ -278,7 +280,7 @@ sudo systemctl status frpc
 
 | Field    | Value                                                |
 | -------- | ---------------------------------------------------- |
-| SSH      | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@106.15.125.84` |
+| SSH      | `sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP` |
 | 穿透方式 | frpc → 云机 frps (port 7000) → port 6001             |
 | User     | `huazhi1`                                            |
 | Password | `huazhi1`                                            |
@@ -297,10 +299,10 @@ sudo systemctl status frpc
 
 ```bash
 # SSH connect (via frp tunnel)
-sshpass -p 'huazhi1' ssh -p 6001 -o StrictHostKeyChecking=no huazhi1@106.15.125.84
+sshpass -p 'huazhi1' ssh -p 6001 -o StrictHostKeyChecking=no huazhi1@YOUR_SERVER_IP
 
 # Run PowerShell command
-sshpass -p 'huazhi1' ssh -p 6001 huazhi1@106.15.125.84 "powershell -Command 'Get-Process'"
+sshpass -p 'huazhi1' ssh -p 6001 huazhi1@YOUR_SERVER_IP "powershell -Command 'Get-Process'"
 ```
 
 ## Notes
@@ -308,3 +310,171 @@ sshpass -p 'huazhi1' ssh -p 6001 huazhi1@106.15.125.84 "powershell -Command 'Get
 - 默认 shell 是 CMD，如需 PowerShell 需加 `powershell -Command '...'`
 - frpc 配置: `C:\frp\frpc.toml`，remotePort = 6001
 - 无公网 IP，依赖 frp 穿透
+
+---
+
+# 6. 新云机（Aliyun ECS - C机中继）
+
+C机的 frps 中继 + nginx 反代，独立于云机。
+
+## Connection
+
+| Field    | Value                                                              |
+| -------- | ------------------------------------------------------------------ |
+| Host     | `47.97.153.197`                                                    |
+| User     | `root`                                                             |
+| Password | `chenhui`                                                          |
+| SSH      | `sshpass -p 'chenhui' ssh -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password root@47.97.153.197` |
+
+> **注意**: 此机器需要 `-o PreferredAuthentications=keyboard-interactive,password` 才能密码登录。
+
+## Specs
+
+| Item     | Detail                       |
+| -------- | ---------------------------- |
+| Hostname | iZbp14vi4g4834c8vrnf6fZ     |
+| OS       | Ubuntu 24.04.2 LTS           |
+| CPU      | 2 vCPU                       |
+| Memory   | 1.6 GiB                      |
+| Disk     | 40 GiB                       |
+
+## Services
+
+### frps (frp 服务端)
+
+```bash
+# config: /etc/frp/frps.toml
+# bindPort = 7000, auth.token = "csfilter2026frp"
+# Dashboard: http://47.97.153.197:7500 (admin/admin123)
+
+sshpass -p 'chenhui' ssh root@47.97.153.197 "systemctl status frps"
+```
+
+### nginx (反向代理)
+
+| URL Path        | 行为                         |
+| --------------- | ---------------------------- |
+| `/`             | 302 重定向到 `/cs2quantix/`  |
+| `/cs2quantix/`  | 反向代理到 C机:5001          |
+
+```bash
+# config: /etc/nginx/sites-available/csfilter
+sshpass -p 'chenhui' ssh root@47.97.153.197 "cat /etc/nginx/sites-available/csfilter"
+```
+
+## UFW Ports
+
+22, 80, 443, 5001, 6001, 6002, 7000, 7500
+
+## Notes
+
+- 仅做 frps 中继 + nginx 反代，不跑业务
+- C机通过 frpc → 新云机 frps:7000 → port 6001 (SSH) / port 5001 (web)
+- 公网访问 CS2 Quantix: http://47.97.153.197/cs2quantix/
+
+---
+
+# 7. C机（Lenovo Gaming 工作站，via frp）
+
+CS2 Quantix 独立部署，通过新云机 frp 穿透访问。
+
+## Connection
+
+| Field    | Value                                                          |
+| -------- | -------------------------------------------------------------- |
+| SSH      | `sshpass -p 'chenhui' ssh -p 6001 -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password chenhui@47.97.153.197` |
+| 穿透方式 | frpc → 新云机 frps (port 7000) → port 6001                    |
+| User     | `chenhui`                                                      |
+| Password | `chenhui`                                                      |
+
+## Specs
+
+| Item     | Detail                               |
+| -------- | ------------------------------------ |
+| Hostname | chenhui-Lenovo-Gaming                |
+| OS       | Ubuntu 24.04.4 LTS                   |
+| CPU      | Intel i7-4720HQ (8 threads, 2.6GHz)  |
+| Memory   | 7.6 GiB                              |
+| Disk     | 109 GiB                              |
+| Role     | CS2 Quantix 独立运行                 |
+
+## CSFilter (CS2 Quantix) 部署
+
+| 项目     | 值                                      |
+| -------- | --------------------------------------- |
+| App 路径 | `/home/chenhui/projects`                |
+| Venv     | `/home/chenhui/projects/.venv`          |
+| DB       | `/home/chenhui/projects/database/csqaq.db` |
+| Logs     | `/home/chenhui/projects/logs/`          |
+| Web      | gunicorn 4 workers, port 5001           |
+
+### Systemd 服务
+
+```bash
+# 服务管理
+sshpass -p 'chenhui' ssh -p 6001 chenhui@47.97.153.197 "sudo systemctl status csfilter-proxy csfilter-scheduler csfilter-web"
+
+# 查看日志
+sshpass -p 'chenhui' ssh -p 6001 chenhui@47.97.153.197 "tail -50 ~/projects/logs/access_app.log"
+sshpass -p 'chenhui' ssh -p 6001 chenhui@47.97.153.197 "sudo journalctl -u csfilter-scheduler -n 30 --no-pager"
+```
+
+### 更新代码流程
+
+```bash
+# 1. 从本地 Mac 推送文件
+sshpass -p 'chenhui' scp -P 6001 -o PubkeyAuthentication=no src/web/app.py chenhui@47.97.153.197:/home/chenhui/projects/src/web/app.py
+
+# 2. 重启服务
+sshpass -p 'chenhui' ssh -p 6001 chenhui@47.97.153.197 "sudo systemctl restart csfilter-web"
+```
+
+## 日志系统
+
+| 日志 | 路径 | 说明 |
+| ---- | ---- | ---- |
+| gunicorn access | `logs/access.log` | HTTP 请求标准格式 |
+| 应用访问 | `logs/access_app.log` | IP、路径、耗时、用户、UA |
+| gunicorn error | `logs/error.log` | 启动/错误 |
+| 采集日志 | `logs/collect_YYYY-MM-DD.log` | scheduler 采集记录 |
+
+## 通知收件人（独立于U机）
+
+```
+2878366733@qq.com, 1872861140@qq.com, 1092493368@qq.com,
+954993689@qq.com, 1253706785@qq.com, 952445655@qq.com,
+892801936@qq.com, 469482674@qq.com
+```
+
+## frpc 配置
+
+```toml
+# ~/.config/frp/frpc.toml
+serverAddr = "47.97.153.197"
+serverPort = 7000
+auth.token = "csfilter2026frp"
+
+[[proxies]]
+name = "ssh-newbox"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6001
+
+[[proxies]]
+name = "csfilter-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 5001
+remotePort = 5001
+```
+
+## Notes
+
+- 无公网 IP，依赖 frp 穿透（frpc → 新云机 frps:7000）
+- 硬件较老（4代i7），采集速度约为U机的 40%
+- 站名: CS2 Quantix · 量化智库
+- 公网访问: http://47.97.153.197/cs2quantix/
+- Chrome 147 + ChromeDriver 147.0.7727.57（手动预填 ~/.wdm/ 缓存）
+- sudo 免密已配置: `/etc/sudoers.d/chenhui`
+- **已安装**: python3.12, google-chrome, chromedriver, gunicorn, frpc

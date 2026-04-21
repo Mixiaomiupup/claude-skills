@@ -38,9 +38,9 @@ anyweb --json read "https://公司官网/product"
 anyweb --json read "https://techcrunch.com/xxx"
 
 # X 账号推文（需要登录态）
-anyweb --chrome --json read "https://x.com/公司官方账号"
-anyweb --chrome --json read "https://x.com/创始人账号"
-anyweb --chrome --json read "https://x.com/核心员工账号"
+anyweb --json read "https://x.com/公司官方账号"
+anyweb --json read "https://x.com/创始人账号"
+anyweb --json read "https://x.com/核心员工账号"
 ```
 
 **X 推文重点关注**：

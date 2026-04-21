@@ -25,13 +25,13 @@ Repository IDs (lookup from remote URL if not listed):
 | Repo | ID | Default Branch |
 |------|----|---------------|
 | calibration | 6236666 | master |
-| claude_skills | 6325169 | master |
-| claude_config | 6334221 | master |
-| Yueke_by_Duco | 6277849 | master |
-| Yueke_flexiv | 6268132 | master |
-| HybridIL-HZ | 6273594 | master |
+| claude-skills | 6325169 | master |
+| claude-config | 6334221 | master |
+| yueke-duco | 6277849 | master |
+| yueke-flexiv | 6268132 | master |
+| hybrid-il | 6273594 | master |
 | hilserl | 6500744 | master |
-| Huazhi_DisplayBoard | 6368780 | master |
+| huazhi-display | 6368780 | master |
 | ucal | 6391996 | master |
 
 ## Steps

@@ -1,0 +1,201 @@
+---
+name: youpin
+description: >
+  悠悠有品(youpin898) CS2 饰品交易平台 API 交互工具。只读查询，严禁买卖操作。
+  支持：查询买卖订单、订单详情、库存查看、钱包余额、商品搜索（按名称查templateId）、商品在售列表、商品求购列表、价格走势（成交价/在售数量/在售价格，7/15/30天）、收益统计分析、Excel导出。
+  当用户提到悠悠有品、youpin、交易记录、收益统计、持仓分析、订单查询、在售数、求购价、市场行情、搜索饰品、查饰品价格、价格走势、在售数量趋势时使用。
+  CRITICAL: 绝对禁止调用任何购买、出售、上架、下架、求购、发货相关接口。
+---
+
+# 悠悠有品 API 交互 (只读)
+
+## CRITICAL SAFETY RULE
+
+**严禁调用任何写入/交易接口。** 本 skill 仅用于数据查询和分析。
+
+### 禁止的操作（永远不要调用）
+
+- 购买商品、下单
+- 上架/下架商品
+- 发起求购
+- 发货/确认收货
+- 修改价格
+- 任何 PUT/DELETE 操作
+- 任何含 `create`、`buy`、`sell`、`deliver`、`purchase/create`、`order/create` 的接口
+
+如果用户要求执行买卖操作，**拒绝并解释此 skill 仅支持只读查询**。
+
+---
+
+## 认证
+
+JWT Bearer Token，有效期约 35 天。Token 存储位置由用户指定（通常在脚本中硬编码或环境变量）。
+
+公共 Headers 和 Body 参数详见 [references/api.md](references/api.md)。
+
+## 允许的查询能力
+
+### 1. 订单查询
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 出售订单列表 | `/api/youpin/bff/trade/sale/v1/sell/list` | POST |
+| 购买订单列表 | `/api/youpin/bff/trade/sale/v1/buy/list` | POST |
+| 订单详情 | `/api/youpin/bff/trade/v1/order/query/detail` | POST |
+
+**分页**: `pageSize` 最大 20（超过返回空），使用 `pageIndex` 翻页。
+
+**订单详情参数**: 使用 `{"orderNo": "订单号"}` （不是 orderId）。
+
+**订单状态**: `orderStatus: 340` = 已完成。
+
+### 2. 商品市场行情（按 templateId 查询）
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 在售列表 | `/api/homepage/v3/detail/commodity/list/sell` | POST |
+| 求购列表 | `/api/youpin/bff/trade/purchase/order/getTemplatePurchaseOrderPageList` | POST |
+
+**在售列表参数**: `{"templateId": "44360", "pageIndex": 1, "pageSize": 10}`
+- 返回 `data.commodityList` — 每件在售商品: price(元,字符串), abrade, stickers, userId 等
+- price 单位是**元**（不是分），字符串类型
+
+**求购列表参数**: `{"templateId": "44360", "pageIndex": 1, "pageSize": 10}`
+- 返回 `data.responseList` — 每个求购单:
+  - `purchasePrice`: 求购单价（元，浮点数）
+  - `surplusQuantity`: 剩余求购数量
+  - `userName`: 求购者名称
+  - `autoReceived`: 是否自动收货
+  - `abradeText`: 磨损要求（如 "0.09-0.1"，可为 null）
+- 按价格从高到低排列
+
+### 3. 商品搜索（按名称查找 templateId）
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 搜索联想（自动补全） | `/api/homepage/search/match` | POST |
+| 搜索结果列表 | `/api/homepage/search/new/list` | POST |
+
+**搜索联想参数** (输入时实时调用):
+```json
+{"keyWords": "红线", "userId": "14095698", "listType": "10", "gameId": 730,
+ "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
+```
+- 返回 `Data.dataList[]` — 每条: `commodityName`, `templateId`, `haveTemplateToggleList`
+- 最多返回 10 条
+- **关键**: 参数名是 `keyWords`（大写W），必须带 `userId` 和 `gameId`(整数)
+
+**搜索结果列表参数** (完整搜索结果，带价格和在售数):
+```json
+{"keyWords": "红线", "listType": 10, "gameId": 730, "pageIndex": 1, "pageSize": 20,
+ "listSortType": 0, "filterMap": {}, "minPrice": "", "maxPrice": "",
+ "userId": "14095698", "AppType": "3", "Platform": "ios", "Version": "5.43.0", "SessionId": "..."}
+```
+- 返回 `Data.commodityTemplateList[]` — 每条: `Id`(=templateId), `CommodityName`, `Price`, `OnSaleCount`, `SteamPrice`
+- 注意: 大写字段名（`Data`, `Id`, `CommodityName`）
+
+**注意**: csfilter 的 `goods_id` 与悠悠有品的 `templateId` 是不同 ID 体系，需通过商品名称桥接
+
+### 4. 库存与商品查询
+
+| 功能 | API |
+|------|-----|
+| 我的库存 | `/api/youpin/commodity-agg/inventory/list/pull` |
+| 在售商品（我的） | `/api/youpin/bff/new/commodity/v1/commodity/list/sell` |
+| 商品详情 | `GET /api/commodity/Commodity/Detail?Id=<id>` |
+
+### 5. 钱包余额
+
+| 功能 | API |
+|------|-----|
+| 账户信息 | `/api/youpin/bff/payment/v1/user/account/info` |
+| 钱包类型 | `/api/youpin/bff/payment/v1/user/account/wallet/type` |
+
+### 6. 价格走势（趋势数据）
+
+| 功能 | API | 方法 |
+|------|-----|------|
+| 趋势筛选配置 | `/api/youpin/price/trend/filter/info` | POST |
+| 趋势数据 | `/api/youpin/price/trend/data` | POST |
+
+**筛选配置参数**: `{"templateId": 782}`
+- 返回可用的趋势类型和天数选项
+- UU 平台类型: `type=1` 成交价格, `type=11` 在售数量, `type=12` 在租数量, `type=14` 在售价格
+- Steam 平台: `type=13`
+- 天数选项: `7`(近7天), `15`(近15天), `30`(近30天) — **最大30天**
+
+**趋势数据参数**: `{"orderType": 1, "day": 30, "templateId": 782}`
+- `orderType`: 对应上面的 type 值
+- `day`: 7 / 15 / 30
+- 返回 `data.tradeDataList[]`:
+  - `time`: 毫秒时间戳
+  - `price`: 值（成交价格时为元；在售数量时为件数）— 字符串类型
+  - `localDate`: 日期 "2026-04-03"
+  - `proportion`: 比例值
+- 每天多个数据点（约5-6个采样），需按 `localDate` 聚合取均值
+
+**常用组合**:
+- 成交价格走势: `orderType=1, day=30`
+- 在售数量走势: `orderType=11, day=30`
+- 在售价格走势: `orderType=14, day=30`
+
+### 7. 收益统计分析
+
+核心分析流程：
+
+1. **拉取订单**: 出售订单（指定时间段）+ 购买订单（全量历史）
+2. **展开多件订单**: 使用 `productDetailList` 字段拆分，每个子品有独立 abrade/price
+3. **匹配买卖**: 有磨损值用 template_id + abrade 精确匹配；无磨损用 template_id FIFO
+4. **统计输出**: 匹配收益、未匹配出售、持仓（未出售购买）
+5. **Excel 导出**: 交易明细 + 汇总统计 + 持仓列表
+
+详细实现参考 [references/profit-analysis.md](references/profit-analysis.md)。
+
+## 关键数据结构
+
+### 订单列表项
+
+```
+orderNo          订单号（字符串）
+orderId          订单ID（数字）
+orderStatus      340=已完成
+totalAmount      总金额（分）
+commodityNum     商品数量
+createOrderTime  创建时间（毫秒时间戳）
+productDetail    单品信息（仅第一件）
+productDetailList 全部商品列表（多件订单必须用这个）
+```
+
+### productDetailList 子项
+
+```
+commodityName       商品名称
+commodityTemplateId 模板ID（同款商品共享）
+abrade / commodityAbrade  磨损值
+price               单品价格（分）
+assertId            资产ID
+commodityId         商品ID
+orderStatus         子品状态
+```
+
+## 执行环境
+
+悠悠有品 API 是公网接口，**本地即可直接调用**，无需通过U机。
+
+```bash
+# 本地直接执行 Python 脚本
+python3 /tmp/script.py
+
+# 结果直接保存到本地
+# 例如 ~/Desktop/result.xlsx
+```
+
+> Token 脚本历史存放在 U机 `/home/mixiaomi/projects/csfilter/scripts/youpin_profit.py`，但执行不依赖U机。
+
+## 注意事项
+
+- 价格单位不统一：**订单接口**的 `totalAmount` 和 `productDetailList.price` 是**分**（除以100），**在售/求购/趋势接口**的 price 是**元**（直接使用）
+- `Gameid: 730` = CS2
+- 多件订单必须用 `productDetailList` 展开，`productDetail` 只有第一件
+- Token 过期后需用户重新提供（从 APP 抓包获取）
+- 手机需开代理才能抓包，**用完提醒用户关闭代理**
